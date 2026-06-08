@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Muxy Gateway HTML5 Vanilla Example</title>
+    <style>
+      body { margin: 0; background: #0f172a; color: white; font-family: system-ui, sans-serif; }
+      main { display: grid; gap: 16px; padding: 20px; }
+      canvas { width: min(100%, 720px); aspect-ratio: 16 / 9; background: #111827; border: 1px solid #334155; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="gateway-ui"></div>
+      <canvas id="game" width="720" height="405"></canvas>
+      <button id="poll">Start Poll</button>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

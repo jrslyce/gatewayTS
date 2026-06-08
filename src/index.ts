@@ -1,0 +1,31 @@
+export { GatewayClient } from "./client";
+export {
+  createAuthWidget,
+  createNotificationHistory,
+  createPollingWidget,
+  type AuthWidgetOptions,
+  type NotificationHistoryOptions,
+  type PollingWidgetOptions
+} from "./ui";
+export {
+  DEFAULT_PRODUCTION_ENDPOINT,
+  DEFAULT_SANDBOX_ENDPOINT,
+  GameActionCategory,
+  GameActionState,
+  InfiniteCount,
+  PollLocation,
+  PollMode,
+  type AuthenticationResponse,
+  type BitsUsed,
+  type GameAction,
+  type GameActionUsed,
+  type GameMetadata,
+  type GameText,
+  type GatewayClientOptions,
+  type GatewayEnvelope,
+  type GatewayError,
+  type PollConfiguration,
+  type PollUpdate,
+  type Stage,
+  type StorageAdapter
+} from "./types";

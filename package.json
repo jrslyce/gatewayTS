@@ -1,0 +1,49 @@
+{
+  "name": "muxy-gateway-html5",
+  "version": "0.1.0",
+  "description": "TypeScript-first HTML5 SDK for integrating Muxy Gateway-style Twitch interactivity into browser games.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "unpkg": "./dist/index.global.js",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "examples",
+    "README.md",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs,iife --global-name MuxyGatewayHTML5 --dts --sourcemap --clean",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepack": "npm run check && npm run test && npm run build"
+  },
+  "keywords": [
+    "muxy",
+    "gateway",
+    "twitch",
+    "html5-games",
+    "phaser",
+    "pixi",
+    "websocket"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "jsdom": "^24.1.0",
+    "tsup": "^8.1.0",
+    "typescript": "^5.5.3",
+    "vitest": "^4.1.8"
+  }
+}
