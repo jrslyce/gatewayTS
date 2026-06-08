@@ -1,4 +1,5 @@
 # Muxy Gateway HTML5
+![Uploading Muxy 400x400-square-logo.png…]()
 
 TypeScript-first HTML5 SDK for adding Muxy Gateway-style Twitch viewer
 interactivity to browser games.
