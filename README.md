@@ -59,6 +59,11 @@ await gateway.setGameActions([
     onGameActionUsed: () => spawnHealthpack()
   }
 ]);
+
+// When the streamer unlinks or the game session ends, clear the persisted
+// Gateway state so the Twitch extension stops showing stale actions/text.
+await gateway.clearGameState();
+await gateway.deauthenticate();
 ```
 
 ## UI Helpers

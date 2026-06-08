@@ -182,8 +182,16 @@ export class GatewayClient {
     this.storage.removeItem(this.storageKey);
     this.authenticated = false;
     this.jwt = "";
-    await this.request("deauthenticate").catch(() => undefined);
+    this.sendFireAndForget("deauthenticate");
     this.disconnect();
+  }
+
+  async clearGameState(): Promise<GatewayEnvelope> {
+    this.actionCallbacks.clear();
+    this.state.metadata = normalizeMetadata({ name: "", logo: "", theme: "" });
+    this.state.actions = [];
+    this.state.texts = [];
+    return this.publishGatewayState();
   }
 
   async setGameMetadata(metadata: GameMetadata): Promise<GatewayEnvelope> {
@@ -303,6 +311,13 @@ export class GatewayClient {
 
   sendRaw(envelope: GatewayEnvelope): void {
     this.ensureTransport();
+    this.transport?.send(envelope);
+  }
+
+  private sendFireAndForget<TData>(action: string, target?: string, data?: TData): void {
+    this.ensureTransport();
+    const envelope = createRequest(action, this.requestIds.next(), target, data);
+    this.emitter.emit("request", envelope);
     this.transport?.send(envelope);
   }
 

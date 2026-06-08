@@ -206,6 +206,51 @@ describe("GatewayClient", () => {
     await texts;
   });
 
+  it("clears published Gateway state before a game disconnects", async () => {
+    const client = makeClient();
+
+    const cleared = client.clearGameState();
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
+
+    expect(sentAt(0)).toMatchObject({
+      action: "set",
+      params: { target: "gameMetadata" },
+      data: { name: "", logo: "", theme: "" }
+    });
+    expect(sentAt(1)).toMatchObject({
+      action: "set",
+      params: { target: "gatewayActions" },
+      data: { actions: [] }
+    });
+    expect(sentAt(2)).toMatchObject({
+      action: "patch",
+      params: { target: "state" },
+      data: {
+        state_id: "channel",
+        state: [{ op: "add", path: "/game/text/game_data", value: [] }]
+      }
+    });
+
+    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
+    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
+    lastSocket().receive({ meta: { request_id: 3 }, data: { ok: true } });
+    await expect(cleared).resolves.toMatchObject({ data: { ok: true } });
+  });
+
+  it("deauthenticates without waiting for a Gateway response", async () => {
+    const storage = new MemoryStorage();
+    storage.setItem("muxy.gateway.gateway-testing.refreshToken", "refresh-token");
+    const client = makeClient(storage);
+    client.connect();
+
+    await vi.waitFor(() => expect(MockWebSocket.instances).toHaveLength(1));
+    await client.deauthenticate();
+
+    expect(sentAt(0)).toMatchObject({ action: "deauthenticate" });
+    expect(storage.getItem("muxy.gateway.gateway-testing.refreshToken")).toBeNull();
+    expect(lastSocket().readyState).toBe(MockWebSocket.CLOSED);
+  });
+
   it("creates polls and translates poll updates", async () => {
     const client = makeClient();
     const pollSpy = vi.fn();

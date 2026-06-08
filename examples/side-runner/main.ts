@@ -252,9 +252,16 @@ linkForm.addEventListener("submit", (event) => {
   });
 });
 
-unlinkButton.addEventListener("click", () => {
+unlinkButton.addEventListener("click", async () => {
+  setGatewayStatus("Clearing Twitch extension state...");
+  running = false;
+
+  await gateway.clearGameState().catch((error) => {
+    gatewayTrace("clear failed", error instanceof Error ? { message: error.message } : {});
+  });
+
   linked = false;
-  void gateway.deauthenticate();
+  await gateway.deauthenticate();
   setGatewayStatus("Not linked. Saved token cleared.");
 });
 
