@@ -10,6 +10,7 @@ export {
 export {
   DEFAULT_PRODUCTION_ENDPOINT,
   DEFAULT_SANDBOX_ENDPOINT,
+  GATEWAY_EXTENSION_CLIENT_ID,
   GameActionCategory,
   GameActionState,
   InfiniteCount,

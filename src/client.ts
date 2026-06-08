@@ -4,7 +4,9 @@ import { actionOf, createRequest, isOk, requestIdOf, resolveEndpoint, targetOf, 
 import { defaultStorage } from "./storage";
 import { BrowserTransport } from "./transport";
 import {
+  GameActionCategory,
   GameActionState,
+  GATEWAY_EXTENSION_CLIENT_ID,
   type AuthenticationResponse,
   type BitsUsed,
   type GameAction,
@@ -35,11 +37,21 @@ type PendingRequest = {
 };
 
 interface GatewayState {
-  game_id: string;
   metadata?: ReturnType<typeof normalizeMetadata>;
   texts?: ReturnType<typeof normalizeTexts>;
   actions?: ReturnType<typeof normalizeAction>[];
 }
+
+type GatewayActionPayload = {
+  id: string;
+  category: "neutral" | "hinder" | "help";
+  state: "unavailable" | "available" | "hidden";
+  impact: number;
+  name: string;
+  description: string;
+  icon: string;
+  count: number;
+};
 
 export class GatewayClient {
   private readonly emitter = new TypedEmitter();
@@ -66,7 +78,7 @@ export class GatewayClient {
     this.storage = options.storage ?? defaultStorage();
     this.storageKey = options.storageKey ?? `muxy.gateway.${options.gameId}.refreshToken`;
     this.logger = options.logger ?? console;
-    this.state = { game_id: options.gameId };
+    this.state = {};
 
     if (options.autoConnect) {
       this.connect();
@@ -151,7 +163,8 @@ export class GatewayClient {
   async authenticateWithPin(pin: string): Promise<AuthenticationResponse> {
     const response = await this.request("authenticate", undefined, {
       pin,
-      client_id: this.options.gameId
+      client_id: GATEWAY_EXTENSION_CLIENT_ID,
+      game_id: this.options.gameId
     });
     return this.handleAuthenticationResponse(response);
   }
@@ -159,7 +172,8 @@ export class GatewayClient {
   async authenticateWithRefreshToken(refresh = this.refreshToken): Promise<AuthenticationResponse> {
     const response = await this.request("authenticate", undefined, {
       refresh,
-      client_id: this.options.gameId
+      client_id: GATEWAY_EXTENSION_CLIENT_ID,
+      game_id: this.options.gameId
     });
     return this.handleAuthenticationResponse(response);
   }
@@ -226,18 +240,16 @@ export class GatewayClient {
   }
 
   async acceptGameAction(used: GameActionUsed, description: string): Promise<GatewayEnvelope> {
-    return this.request("validate", "transaction_complete", {
+    return this.request("validate", "transaction", {
       transaction_id: used.transactionId,
-      user_id: used.userId,
       details: description
     });
   }
 
-  async refundGameAction(used: GameActionUsed, description: string): Promise<GatewayEnvelope> {
-    return this.request("refund", "transaction_complete", {
+  async refundGameAction(used: GameActionUsed, _description: string): Promise<GatewayEnvelope> {
+    return this.request("refund", "transaction", {
       transaction_id: used.transactionId,
-      user_id: used.userId,
-      details: description
+      user_id: used.userId
     });
   }
 
@@ -286,7 +298,7 @@ export class GatewayClient {
   }
 
   async subscribeToTransactions(sku = "*"): Promise<GatewayEnvelope> {
-    return this.request("subscribe", "transaction_complete", { sku });
+    return this.request("subscribe", "twitchPurchaseBits", { sku });
   }
 
   sendRaw(envelope: GatewayEnvelope): void {
@@ -314,38 +326,50 @@ export class GatewayClient {
 
   private receive(envelope: GatewayEnvelope): void {
     this.emitter.emit("message", envelope);
-    this.resolvePending(envelope);
-    this.routeEvent(envelope);
+    const hadPendingRequest = this.resolvePending(envelope);
+    this.routeEvent(envelope, hadPendingRequest);
   }
 
-  private resolvePending(envelope: GatewayEnvelope): void {
+  private resolvePending(envelope: GatewayEnvelope): boolean {
     const id = requestIdOf(envelope);
     if (typeof id !== "number") {
-      return;
+      return false;
     }
 
     const pending = this.pending.get(id);
     if (!pending) {
-      return;
+      return false;
     }
 
     this.pending.delete(id);
-    if (isOk(envelope)) {
+    if (isOk(envelope) || actionOf(envelope) === "authenticate") {
       pending.resolve(envelope);
     } else {
       pending.reject(envelope.errors);
     }
+    return true;
   }
 
-  private routeEvent(envelope: GatewayEnvelope): void {
+  private routeEvent(envelope: GatewayEnvelope, hadPendingRequest = false): void {
     if (envelope.errors?.length) {
       this.emitter.emit("error", envelope.errors);
       this.emitter.emit("debug", envelope.errors);
-      return;
     }
 
     const action = actionOf(envelope);
     const target = targetOf(envelope);
+
+    if (target === "authentication" || action === "authenticate") {
+      if (!hadPendingRequest) {
+        const response = this.toAuthenticationResponse(envelope);
+        this.emitter.emit("authentication", response);
+      }
+      return;
+    }
+
+    if (envelope.errors?.length) {
+      return;
+    }
 
     if (target === "poll" && action === "update") {
       const data = envelope.data as { topic_id?: string; results?: number[] } | undefined;
@@ -356,14 +380,9 @@ export class GatewayClient {
       return;
     }
 
-    if (target === "transaction_complete" && action === "update") {
+    if ((target === "transaction_complete" || target === "twitchPurchaseBits") && action === "update") {
       this.emitTransaction(envelope.data);
       return;
-    }
-
-    if (target === "authentication" || action === "authenticate") {
-      const response = this.toAuthenticationResponse(envelope);
-      this.emitter.emit("authentication", response);
     }
   }
 
@@ -395,11 +414,41 @@ export class GatewayClient {
   }
 
   private async publishGatewayState(): Promise<GatewayEnvelope> {
-    return this.request("set", "channel", {
-      state: {
-        gateway: this.state
-      }
-    });
+    const requests: Promise<GatewayEnvelope>[] = [];
+
+    if (this.state.metadata) {
+      requests.push(this.request("set", "gameMetadata", this.state.metadata));
+    }
+
+    if (this.state.actions) {
+      requests.push(
+        this.request("set", "gatewayActions", {
+          actions: this.state.actions.map((action) => this.toGatewayActionPayload(action))
+        })
+      );
+    }
+
+    if (this.state.texts) {
+      requests.push(
+        this.request("patch", "state", {
+          state_id: "channel",
+          state: [
+            {
+              op: "add",
+              path: "/game/text/game_data",
+              value: this.state.texts
+            }
+          ]
+        })
+      );
+    }
+
+    if (requests.length === 0) {
+      return this.request("set", "gameMetadata", { name: "", logo: "", theme: "" });
+    }
+
+    const responses = await Promise.all(requests);
+    return responses[responses.length - 1] as GatewayEnvelope;
   }
 
   private async setActionState(id: string, state: GameActionState): Promise<GatewayEnvelope> {
@@ -413,6 +462,38 @@ export class GatewayClient {
       throw new Error(`Unknown Gateway action "${id}"`);
     }
     return action;
+  }
+
+  private toGatewayActionPayload(action: ReturnType<typeof normalizeAction>): GatewayActionPayload {
+    return {
+      ...action,
+      category: this.toGatewayActionCategory(action.category),
+      state: this.toGatewayActionState(action.state)
+    };
+  }
+
+  private toGatewayActionCategory(category: GameActionCategory): GatewayActionPayload["category"] {
+    switch (category) {
+      case GameActionCategory.Hinder:
+        return "hinder";
+      case GameActionCategory.Help:
+        return "help";
+      case GameActionCategory.Neutral:
+      default:
+        return "neutral";
+    }
+  }
+
+  private toGatewayActionState(state: GameActionState): GatewayActionPayload["state"] {
+    switch (state) {
+      case GameActionState.Available:
+        return "available";
+      case GameActionState.Hidden:
+        return "hidden";
+      case GameActionState.Unavailable:
+      default:
+        return "unavailable";
+    }
   }
 
   private emitPollUpdate(update: PollUpdate): void {
