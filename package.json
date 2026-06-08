@@ -26,6 +26,7 @@
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs,iife --global-name MuxyGatewayHTML5 --dts --sourcemap --clean",
     "check": "tsc --noEmit",
+    "dev:side-runner": "vite --config examples/side-runner/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepack": "npm run check && npm run test && npm run build"
@@ -44,6 +45,7 @@
     "jsdom": "^24.1.0",
     "tsup": "^8.1.0",
     "typescript": "^5.5.3",
+    "vite": "^7.3.5",
     "vitest": "^4.1.8"
   }
 }

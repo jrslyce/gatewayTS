@@ -1,7 +1,10 @@
 export type Stage = "production" | "sandbox";
 
-export const DEFAULT_PRODUCTION_ENDPOINT = "wss://api.muxy.io/v1/e/gamelink/ws";
-export const DEFAULT_SANDBOX_ENDPOINT = "wss://sandboxy.muxy.io/v1/e/gamelink/ws";
+export const GATEWAY_EXTENSION_CLIENT_ID = "i575hs2x9lb3u8hqujtezit03w1740";
+export const DEFAULT_PRODUCTION_ENDPOINT =
+  "ws://gamelink.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
+export const DEFAULT_SANDBOX_ENDPOINT =
+  "ws://gamelink.sandbox.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
 
 export interface StorageAdapter {
   getItem(key: string): string | null;

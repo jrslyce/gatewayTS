@@ -3,6 +3,7 @@ import {
   GatewayClient,
   GameActionCategory,
   GameActionState,
+  GATEWAY_EXTENSION_CLIENT_ID,
   InfiniteCount,
   PollMode
 } from "../src";
@@ -42,7 +43,11 @@ describe("GatewayClient", () => {
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
     expect(sentAt(0)).toMatchObject({
       action: "authenticate",
-      data: { pin: "pZV4Se", client_id: "gateway-testing" }
+      data: {
+        pin: "pZV4Se",
+        client_id: GATEWAY_EXTENSION_CLIENT_ID,
+        game_id: "gateway-testing"
+      }
     });
 
     lastSocket().receive({
@@ -59,7 +64,25 @@ describe("GatewayClient", () => {
     expect(client.isAuthenticated).toBe(true);
   });
 
-  it("publishes Unity-compatible actions in channel state", async () => {
+  it("resolves authentication failures with Gateway error details", async () => {
+    const client = makeClient();
+    const auth = client.authenticateWithPin("EXPIRED");
+
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
+    lastSocket().receive({
+      meta: { request_id: 1, action: "authenticate", target: "" },
+      data: null,
+      errors: [{ status: 403, title: "Forbidden", detail: "Invalid authorization token" }]
+    });
+
+    await expect(auth).resolves.toMatchObject({
+      hasError: true,
+      errors: [{ detail: "Invalid authorization token" }]
+    });
+    expect(client.isAuthenticated).toBe(false);
+  });
+
+  it("publishes Unity-compatible actions to gatewayActions", async () => {
     const client = makeClient();
     const setActions = client.setGameActions([
       {
@@ -77,28 +100,23 @@ describe("GatewayClient", () => {
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
     expect(sentAt(0)).toMatchObject({
       action: "subscribe",
-      params: { target: "transaction_complete" },
+      params: { target: "twitchPurchaseBits" },
       data: { sku: "*" }
     });
     lastSocket().receive({ meta: { request_id: 1, action: "subscribe" }, data: { ok: true } });
 
     expect(sentAt(1)).toMatchObject({
       action: "set",
-      params: { target: "channel" },
+      params: { target: "gatewayActions" },
       data: {
-        state: {
-          gateway: {
-            game_id: "gateway-testing",
-            actions: [
-              {
-                id: "healthpack",
-                category: GameActionCategory.Help,
-                state: GameActionState.Available,
-                impact: 2
-              }
-            ]
+        actions: [
+          {
+            id: "healthpack",
+            category: "help",
+            state: "available",
+            impact: 2
           }
-        }
+        ]
       }
     });
 
@@ -130,7 +148,7 @@ describe("GatewayClient", () => {
 
     lastSocket().receive({
       action: "update",
-      params: { request_id: 0xffff, target: "transaction_complete" },
+      params: { request_id: 0xffff, target: "twitchPurchaseBits" },
       data: {
         sku: "killplayer",
         cost: 100,
@@ -146,6 +164,46 @@ describe("GatewayClient", () => {
     expect(actionSpy).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: "tx-1", actionId: "killplayer", cost: 100 })
     );
+  });
+
+  it("publishes metadata and game text in Unity-compatible targets", async () => {
+    const client = makeClient();
+
+    const metadata = client.setGameMetadata({ name: "Professor Toast", logo: "", theme: "neon-toast" });
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
+    expect(sentAt(0)).toMatchObject({
+      action: "set",
+      params: { target: "gameMetadata" },
+      data: { name: "Professor Toast", logo: "", theme: "neon-toast" }
+    });
+    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
+    await metadata;
+
+    const texts = client.setGameTexts([
+      { label: "Distance", value: "12m", icon: "" },
+      { label: "Toast Heat", value: "4", icon: "" }
+    ]);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
+    expect(sentAt(2)).toMatchObject({
+      action: "patch",
+      params: { target: "state" },
+      data: {
+        state_id: "channel",
+        state: [
+          {
+            op: "add",
+            path: "/game/text/game_data",
+            value: [
+              { label: "Distance", value: "12m", icon: "" },
+              { label: "Toast Heat", value: "4", icon: "" }
+            ]
+          }
+        ]
+      }
+    });
+    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
+    lastSocket().receive({ meta: { request_id: 3 }, data: { ok: true } });
+    await texts;
   });
 
   it("creates polls and translates poll updates", async () => {

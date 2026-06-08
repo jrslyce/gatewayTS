@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Professor Toast's Sideways Panic</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="menu" class="menu-panel">
+        <div class="brand-lockup">
+          <p>Gateway HTML5 Test Game</p>
+          <h1>Professor Toast's Sideways Panic</h1>
+        </div>
+
+        <div class="muxy-card">
+          <div>
+            <span class="status-dot" id="gateway-dot"></span>
+            <strong id="link-status">Not linked</strong>
+            <p id="gateway-status">Gateway is preparing the websocket.</p>
+          </div>
+
+          <form id="link-form" class="link-form">
+            <label for="pin-input">Muxy link code</label>
+            <div>
+              <input id="pin-input" maxlength="12" autocomplete="one-time-code" placeholder="ABC123" />
+              <button type="submit">Link</button>
+            </div>
+          </form>
+
+          <button id="unlink-button" class="secondary-button" type="button">Unlink</button>
+
+          <div class="gateway-debug" aria-live="polite">
+            <strong>Gateway trace</strong>
+            <ol id="gateway-debug-log"></ol>
+          </div>
+        </div>
+
+        <div class="menu-actions">
+          <div class="menu-button-row">
+            <button id="muxy-start-button" type="button">Start Muxy Run</button>
+            <button id="demo-button" class="secondary-button" type="button">Demo</button>
+          </div>
+          <p>
+            Muxy mode listens only for real Twitch viewer actions. Demo mode
+            keeps the local simulator buttons for quick testing.
+          </p>
+        </div>
+      </section>
+
+      <section id="game-screen" class="game-screen is-hidden">
+        <div class="hud">
+          <div><span>Mode</span><strong id="mode-readout">Muxy</strong></div>
+          <div><span>Health</span><strong id="health-readout">100</strong></div>
+          <div><span>Distance</span><strong id="distance-readout">0m</strong></div>
+          <div><span>Toast Heat</span><strong id="heat-readout">1x</strong></div>
+          <button id="menu-button" type="button">Menu</button>
+        </div>
+
+        <canvas id="game-canvas" width="960" height="540"></canvas>
+
+        <aside class="event-feed" aria-live="polite">
+          <h2>Viewer Feed</h2>
+          <ol id="event-feed"></ol>
+        </aside>
+
+        <aside class="simulator-panel">
+          <h2>Local Viewer Simulator</h2>
+          <div id="simulator-actions"></div>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

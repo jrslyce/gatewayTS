@@ -45,7 +45,7 @@ describe("UI helpers", () => {
 
     lastSocket().receive({
       action: "update",
-      params: { target: "transaction_complete" },
+      params: { target: "twitchPurchaseBits" },
       data: { sku: "heal", id: "tx", cost: 1, username: "viewer" }
     });
 

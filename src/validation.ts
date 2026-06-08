@@ -31,8 +31,8 @@ export function normalizeAction(action: GameAction): Required<Omit<GameAction, "
   }
 
   const impact = Math.trunc(action.impact);
-  if (impact < 1 || impact > 5) {
-    throw new Error(`Gateway action "${action.id}" impact must be between 1 and 5`);
+  if (!Number.isFinite(impact) || impact < 0) {
+    throw new Error(`Gateway action "${action.id}" impact must be a non-negative number`);
   }
 
   return {

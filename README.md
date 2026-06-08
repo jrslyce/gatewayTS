@@ -97,8 +97,12 @@ for the game ID before going live.
 - `examples/vanilla`
 - `examples/phaser`
 - `examples/pixi`
+- `examples/side-runner`
 
 Each example shows authentication, one action, one game text update, and a poll.
+The side-runner is the most complete test game: it uses `gamelink-testing`,
+shows link state on the main menu, registers five viewer actions, and includes
+local simulation buttons for testing the in-game visual effects.
 
 ## Reference
 
