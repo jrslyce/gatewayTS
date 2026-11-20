@@ -1101,11 +1101,11 @@ var HypelineHTML5 = (() => {
     root.innerHTML = `
     <form>
       <strong>${escapeHtml(options.title ?? "Hypeline")}</strong>
-      <input name="pin" autocomplete="one-time-code" maxlength="6" placeholder="PIN" />
+      <input name="pin" aria-label="Six-character extension code" autocomplete="one-time-code" required pattern="[A-Za-z0-9]{6}" maxlength="6" placeholder="PIN" />
       <button type="submit">Authenticate</button>
       <button type="button" data-role="disconnect">Disconnect</button>
       <a href="${escapeAttribute(options.extensionUrl ?? "https://dashboard.twitch.tv/extensions/i575hs2x9lb3u8hqujtezit03w1740")}" target="_blank" rel="noreferrer">Get extension</a>
-      <p data-role="status"></p>
+      <p data-role="status" role="status"></p>
     </form>
   `;
     injectBaseStyles();
@@ -1114,15 +1114,16 @@ var HypelineHTML5 = (() => {
     const input = root.querySelector("input");
     const status = root.querySelector('[data-role="status"]');
     const disconnect = root.querySelector('[data-role="disconnect"]');
+    const showAuthResult = (response) => {
+      status.textContent = response.hasError ? "GameLink did not authorize this session. Check Linked Games in the extension and request a fresh code." : "Authenticated";
+    };
     const onSubmit = (event) => {
       event.preventDefault();
       status.textContent = "Authenticating...";
       const pin = input.value;
       input.value = "";
-      void client.authenticateWithPin(pin).then((response) => {
-        status.textContent = response.hasError ? "Authentication failed" : "Authenticated";
-      }).catch(() => {
-        status.textContent = "Connection failed. Check your code and try again.";
+      void client.authenticateWithPin(pin).then(showAuthResult).catch(() => {
+        status.textContent = "Sign-in did not complete. Check the GameLink WebSocket connection in your browser\u2019s Network panel.";
       });
     };
     const onDisconnect = () => {
@@ -1130,9 +1131,7 @@ var HypelineHTML5 = (() => {
         status.textContent = "Disconnected";
       });
     };
-    const offAuth = client.on("authentication", (response) => {
-      status.textContent = response.hasError ? "Authentication failed" : "Authenticated";
-    });
+    const offAuth = client.on("authentication", showAuthResult);
     form.addEventListener("submit", onSubmit);
     disconnect.addEventListener("click", onDisconnect);
     return {
