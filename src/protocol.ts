@@ -31,7 +31,7 @@ export function validateEndpoint(address: string): void {
   try {
     url = new URL(address);
   } catch {
-    throw new Error("Invalid Hypecade WebSocket endpoint");
+    throw new Error("Invalid Hypeline WebSocket endpoint");
   }
   const loopback = url.hostname === "localhost" || url.hostname === "[::1]" ||
     /^127(?:\.\d{1,3}){3}$/.test(url.hostname);

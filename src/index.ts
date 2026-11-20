@@ -1,4 +1,4 @@
-export { HypecadeClient, GatewayClient } from "./client";
+export { HypelineClient, GatewayClient } from "./client";
 export {
   createAuthWidget,
   createNotificationHistory,
@@ -23,10 +23,10 @@ export {
   type GameActionUsed,
   type GameMetadata,
   type GameText,
-  type HypecadeClientOptions,
+  type HypelineClientOptions,
   type GatewayClientOptions,
-  type GatewayEnvelope as HypecadeEnvelope,
-  type GatewayError as HypecadeError,
+  type GatewayEnvelope as HypelineEnvelope,
+  type GatewayError as HypelineError,
   type GatewayEnvelope,
   type GatewayError,
   type PollConfiguration,

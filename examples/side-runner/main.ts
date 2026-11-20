@@ -1,12 +1,12 @@
 import {
   GameActionCategory,
   GameActionState,
-  HypecadeClient,
+  HypelineClient,
   InfiniteCount,
   type GameAction,
   type GameActionUsed,
-  type HypecadeEnvelope,
-  type HypecadeError
+  type HypelineEnvelope,
+  type HypelineError
 } from "../../src";
 
 const GAME_ID = "gamelink-testing";
@@ -122,7 +122,7 @@ const healthReadout = document.querySelector("#health-readout") as HTMLElement;
 const distanceReadout = document.querySelector("#distance-readout") as HTMLElement;
 const heatReadout = document.querySelector("#heat-readout") as HTMLElement;
 
-const gateway = new HypecadeClient({
+const gateway = new HypelineClient({
   gameId: GAME_ID,
   stage: "production",
   autoConnect: true,
@@ -131,7 +131,7 @@ const gateway = new HypecadeClient({
 });
 
 function gatewayTrace(label: string, details?: unknown): void {
-  console.info(`[Hypecade] ${label}`, details ?? "");
+  console.info(`[Hypeline] ${label}`, details ?? "");
   const item = document.createElement("li");
   const payload = typeof details === "undefined" || details === "" ? "" : ` ${JSON.stringify(details)}`;
   item.textContent = `${new Date().toLocaleTimeString()} ${label}${payload}`;
@@ -142,7 +142,7 @@ function gatewayTrace(label: string, details?: unknown): void {
   }
 }
 
-function summarizeEnvelope(envelope: HypecadeEnvelope): Record<string, unknown> {
+function summarizeEnvelope(envelope: HypelineEnvelope): Record<string, unknown> {
   const data = envelope.data && typeof envelope.data === "object" ? (envelope.data as Record<string, unknown>) : undefined;
 
   return {
@@ -150,11 +150,11 @@ function summarizeEnvelope(envelope: HypecadeEnvelope): Record<string, unknown> 
     target: envelope.params?.target ?? envelope.meta?.target,
     requestId: envelope.params?.request_id ?? envelope.meta?.request_id,
     dataKeys: data ? Object.keys(data).filter((key) => !["pin", "jwt", "refresh", "refreshToken"].includes(key)) : [],
-    errors: envelope.errors?.map(summarizeHypecadeError)
+    errors: envelope.errors?.map(summarizeHypelineError)
   };
 }
 
-function summarizeHypecadeError(error: HypecadeError): Record<string, unknown> {
+function summarizeHypelineError(error: HypelineError): Record<string, unknown> {
   return {
     status: error.status
   };
@@ -198,14 +198,14 @@ gateway.on("disconnect", (event) => {
   gatewayTrace("disconnected", "code" in event ? { code: event.code } : {});
   gatewayReady = false;
   linked = false;
-  setGatewayStatus("Hypecade disconnected. It will retry automatically.");
+  setGatewayStatus("Hypeline disconnected. It will retry automatically.");
 });
 
 gateway.on("authentication", (response) => {
   gatewayTrace("authentication", {
     hasError: response.hasError,
     twitchUsername: response.twitchUsername,
-    errors: response.errors?.map(summarizeHypecadeError)
+    errors: response.errors?.map(summarizeHypelineError)
   });
   linked = !response.hasError;
   const errorDetail = response.errors?.[0]?.detail;
@@ -237,7 +237,7 @@ gateway.on("message", (envelope) => {
 });
 
 gateway.on("error", (error) => {
-  gatewayTrace("error", Array.isArray(error) ? error.map(summarizeHypecadeError) : {});
+  gatewayTrace("error", Array.isArray(error) ? error.map(summarizeHypelineError) : {});
 });
 
 linkForm.addEventListener("submit", (event) => {
@@ -249,10 +249,10 @@ linkForm.addEventListener("submit", (event) => {
     return;
   }
 
-  setGatewayStatus("Linking with Hypecade...");
+  setGatewayStatus("Linking with Hypeline...");
   void gateway.authenticateWithPin(pin).catch(() => {
     linked = false;
-    setGatewayStatus("Link failed. Check that the code is fresh and Hypecade is connected.");
+    setGatewayStatus("Link failed. Check that the code is fresh and Hypeline is connected.");
   });
 });
 
@@ -322,7 +322,7 @@ function registerGatewayState(): void {
 function sendGameTexts(): void {
   if (!linked) return;
   void gateway.setGameTexts([
-    { label: "Run State", value: running ? (runMode === "muxy" ? "Hypecade Run" : "Demo Run") : "Menu", icon: "fa-solid:person-running" },
+    { label: "Run State", value: running ? (runMode === "muxy" ? "Hypeline Run" : "Demo Run") : "Menu", icon: "fa-solid:person-running" },
     { label: "Distance", value: `${Math.floor(distance)}m`, icon: "fa-solid:road" },
     { label: "Health", value: `${Math.max(0, Math.floor(health))}`, icon: "fa-solid:heart" }
   ]).catch(() => undefined);
@@ -342,7 +342,7 @@ function trySavedRefreshToken(): void {
 
 function setGatewayStatus(message?: string): void {
   linkStatus.textContent = linked ? "Linked" : "Not linked";
-  gatewayStatus.textContent = message ?? (gatewayReady ? "Hypecade WebSocket is ready." : "Hypecade WebSocket is connecting.");
+  gatewayStatus.textContent = message ?? (gatewayReady ? "Hypeline WebSocket is ready." : "Hypeline WebSocket is connecting.");
   gatewayDot.classList.toggle("is-ready", linked);
 }
 
@@ -363,7 +363,7 @@ function resetRun(): void {
   player.grounded = true;
   updateHud();
   eventFeed.replaceChildren();
-  addFeed(runMode === "muxy" ? "Hypecade run started. Waiting for Twitch viewers." : "Demo run started. Local simulator is active.");
+  addFeed(runMode === "muxy" ? "Hypeline run started. Waiting for Twitch viewers." : "Demo run started. Local simulator is active.");
 }
 
 function applyViewerAbility(actionId: AbilityId, username: string, used?: GameActionUsed): void {
@@ -638,7 +638,7 @@ function roundedRect(x: number, y: number, width: number, height: number, radius
 }
 
 function updateHud(): void {
-  modeReadout.textContent = runMode === "muxy" ? "Hypecade" : "Demo";
+  modeReadout.textContent = runMode === "muxy" ? "Hypeline" : "Demo";
   healthReadout.textContent = `${Math.max(0, Math.floor(health))}`;
   distanceReadout.textContent = `${Math.floor(distance)}m`;
   heatReadout.textContent = `${heat}x`;

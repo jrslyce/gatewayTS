@@ -1,12 +1,14 @@
-# Hypecade for HTML5 games
+# Hypeline for HTML5 games
 
-Hypecade runs inside the broadcaster's game. A viewer chooses an action in the **Muxy Gateway** Twitch extension, your game applies the effect, and the game reports the outcome to GameLink.
+New to the SDK? Start with the [interactive HTML5 walkthrough](https://jrslyce.github.io/hypeline-html5/) or give your coding agent the [installation prompt](../site/install-hypeline.md).
+
+Hypeline runs inside the broadcaster's game. A viewer chooses an action in the **Muxy Gateway** Twitch extension, your game applies the effect, and the game reports the outcome to GameLink.
 
 ## Connect a broadcaster
 
 1. Register your game's permanent ID at [the Muxy developer portal](https://dev.muxy.io/games). Use `gamelink-testing` for a sample. IDs are 3–64 lowercase letters or digits with optional single hyphens between them. The client trims whitespace and lowercases the ID.
 2. Have the broadcaster install and activate the Muxy Gateway extension on their channel. In its configuration, allow your game if Linked Games lists it, then request a new six-character code.
-3. Use the [auth widget](../../README.md#add-hypecade-to-your-game) or pass the code to `authenticateWithPin(code)`. The client trims and uppercases it. Check `response.hasError` before publishing. Connection failures and timeouts reject the promise. Keep the authentication result private because it contains credentials.
+3. Use the [auth widget](../../README.md#add-hypeline-to-your-game) or pass the code to `authenticateWithPin(code)`. The client trims and uppercases it. Check `response.hasError` before publishing. Connection failures and timeouts reject the promise. Keep the authentication result private because it contains credentials.
 
 The default stage is `production`, including tests on your own channel. `staging` is for Muxy's internal environment. The hosted sandbox is retired. Existing test harnesses can still use the `sandbox` value with an explicit test endpoint.
 
@@ -18,10 +20,10 @@ Register the notification widget once, then publish your actions after successfu
 
 ```ts
 import {
-  HypecadeClient, GameActionCategory, GameActionState, createNotificationHistory
+  HypelineClient, GameActionCategory, GameActionState, createNotificationHistory
 } from "muxy-gateway-html5";
 
-const game = new HypecadeClient({ gameId: "gamelink-testing" });
+const game = new HypelineClient({ gameId: "gamelink-testing" });
 const alerts = createNotificationHistory(hud, game, {
   messageTemplate: "{Username} selected {ActionID}"
 });
@@ -92,11 +94,11 @@ On unlink, call `clearGameState()` while signed in, then use `deauthenticate()` 
 
 ## Migrate a Gateway integration
 
-| Existing integration | Hypecade equivalent |
+| Existing integration | Hypeline equivalent |
 | --- | --- |
-| `GatewayClient` / `GatewayClientOptions` | `HypecadeClient` / `HypecadeClientOptions` |
-| `MuxyGatewayHTML5.GatewayClient` | `HypecadeHTML5.HypecadeClient` |
-| `GatewayEnvelope` / `GatewayError` | `HypecadeEnvelope` / `HypecadeError` |
+| `GatewayClient` / `GatewayClientOptions` | `HypelineClient` / `HypelineClientOptions` |
+| `MuxyGatewayHTML5.GatewayClient` | `HypelineHTML5.HypelineClient` |
+| `GatewayEnvelope` / `GatewayError` | `HypelineEnvelope` / `HypelineError` |
 
 Both sets of names resolve to the same implementation. The package name `muxy-gateway-html5`, existing production storage keys, CSS classes, Twitch extension ID, and GameLink protocol identifiers retain their Gateway spelling. Update any remote plaintext endpoint overrides to WSS, replace hosted sandbox configuration with production, and move command calls into your successful sign-in flow.
 

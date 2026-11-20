@@ -1,5 +1,5 @@
 import {
-  HypecadeClient,
+  HypelineClient,
   GameActionCategory,
   GameActionState,
   InfiniteCount,
@@ -10,7 +10,7 @@ import {
 
 declare const Phaser: any;
 
-const gateway = new HypecadeClient({
+const gateway = new HypelineClient({
   gameId: "gamelink-testing",
   stage: "production"
 });
@@ -21,7 +21,7 @@ let coins = 0;
 
 gateway.on("authentication", async ({ hasError }) => {
   if (hasError) return;
-  await gateway.setGameMetadata({ name: "Phaser Hypecade Demo" });
+  await gateway.setGameMetadata({ name: "Phaser Hypeline Demo" });
   await gateway.setGameTexts([{ label: "Coins", value: "0", icon: "fa-solid:coins" }]);
   await gateway.setGameActions([
     {

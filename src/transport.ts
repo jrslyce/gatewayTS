@@ -112,7 +112,7 @@ export class BrowserTransport {
   }
 
   send(envelope: GatewayEnvelope): (() => void) | undefined {
-    if (this.stopped) throw new Error("Hypecade connection is closed");
+    if (this.stopped) throw new Error("Hypeline connection is closed");
     const message = JSON.stringify(envelope);
     if (!this.isOpen) {
       const maxQueuedMessages = this.options.maxQueuedMessages ?? 100;

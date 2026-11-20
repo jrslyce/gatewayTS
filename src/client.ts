@@ -13,7 +13,7 @@ import {
   type GameActionUsed,
   type GameMetadata,
   type GameText,
-  type HypecadeClientOptions,
+  type HypelineClientOptions,
   type GatewayEnvelope,
   type GatewayEventMap,
   type GatewayEventName,
@@ -57,8 +57,8 @@ type GatewayActionPayload = {
   count: number;
 };
 
-export class HypecadeClient {
-  private readonly listenerError = () => this.logger.warn("Hypecade event listener failed");
+export class HypelineClient {
+  private readonly listenerError = () => this.logger.warn("Hypeline event listener failed");
   private readonly emitter = new TypedEmitter(this.listenerError);
   private readonly recentTransactions = new Set<string>();
   private sessionUser = "";
@@ -91,7 +91,7 @@ export class HypecadeClient {
   private readonly desiredSubscriptions = new Set<string>();
   private authenticated = false;
 
-  constructor(private readonly options: HypecadeClientOptions) {
+  constructor(private readonly options: HypelineClientOptions) {
     this.gameId = normalizeGameId(options.gameId);
     if (options.requestTimeoutMs !== undefined &&
       (!Number.isFinite(options.requestTimeoutMs) || options.requestTimeoutMs <= 0)) {
@@ -167,7 +167,7 @@ export class HypecadeClient {
   }
 
   connect(): void {
-    if (this.disposed || this.signingOut) throw new Error("Hypecade client is closed");
+    if (this.disposed || this.signingOut) throw new Error("Hypeline client is closed");
     if (this.transport) {
       this.transport.connect();
       return;
@@ -430,7 +430,7 @@ export class HypecadeClient {
         this.pollTimer = setTimeout(() => {
           void this.serializePoll(async () => {
             if (this.currentPoll === poll) await this.closePoll(true);
-          }).catch(() => this.logger.warn("Hypecade poll cleanup failed"));
+          }).catch(() => this.logger.warn("Hypeline poll cleanup failed"));
         }, poll.durationInSeconds * 1000);
       }
 
@@ -672,12 +672,12 @@ export class HypecadeClient {
 
   private subscribeInBackground(sku: string): void {
     if (!this.subscriptions.has(sku)) {
-      void this.subscribeToTransactions(sku).catch(() => this.logger.warn("Hypecade subscription failed"));
+      void this.subscribeToTransactions(sku).catch(() => this.logger.warn("Hypeline subscription failed"));
     }
   }
 
   private requireAuthentication(): void {
-    if (!this.authenticated || this.signingOut || this.disposed) throw new Error("Sign in to Hypecade first");
+    if (!this.authenticated || this.signingOut || this.disposed) throw new Error("Sign in to Hypeline first");
   }
 
   private updateAction(id: string, change: Record<string, unknown>): Promise<GatewayEnvelope> {
@@ -769,7 +769,7 @@ export class HypecadeClient {
   }
 
   private ensureTransport(): void {
-    if (this.disposed || this.signingOut) throw new Error("Hypecade client is closed");
+    if (this.disposed || this.signingOut) throw new Error("Hypeline client is closed");
     if (!this.transport) {
       this.connect();
     }
@@ -792,8 +792,8 @@ export class HypecadeClient {
   }
 }
 
-/** @deprecated Use HypecadeClient. */
-export { HypecadeClient as GatewayClient };
+/** @deprecated Use HypelineClient. */
+export { HypelineClient as GatewayClient };
 
 function diagnosticEnvelope(envelope: GatewayEnvelope, authentication: boolean): GatewayEnvelope {
   const data = envelope.data;

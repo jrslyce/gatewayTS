@@ -1,4 +1,4 @@
-import type { HypecadeClient } from "./client";
+import type { HypelineClient } from "./client";
 import type { GameActionUsed, PollUpdate } from "./types";
 
 type Destroyable = { destroy(): void };
@@ -24,14 +24,14 @@ export interface PollingWidgetOptions {
 
 export function createAuthWidget(
   container: HTMLElement,
-  client: HypecadeClient,
+  client: HypelineClient,
   options: AuthWidgetOptions = {}
 ): Destroyable {
   const root = document.createElement("section");
   root.className = options.className ?? "muxy-gateway-auth";
   root.innerHTML = `
     <form>
-      <strong>${escapeHtml(options.title ?? "Hypecade")}</strong>
+      <strong>${escapeHtml(options.title ?? "Hypeline")}</strong>
       <input name="pin" autocomplete="one-time-code" maxlength="6" placeholder="PIN" />
       <button type="submit">Authenticate</button>
       <button type="button" data-role="disconnect">Disconnect</button>
@@ -83,7 +83,7 @@ export function createAuthWidget(
 
 export function createNotificationHistory(
   container: HTMLElement,
-  client: HypecadeClient,
+  client: HypelineClient,
   options: NotificationHistoryOptions = {}
 ): Destroyable {
   const root = document.createElement("ol");
@@ -135,7 +135,7 @@ export function createNotificationHistory(
 
 export function createPollingWidget(
   container: HTMLElement,
-  client: HypecadeClient,
+  client: HypelineClient,
   options: PollingWidgetOptions = {}
 ): Destroyable {
   const root = document.createElement("section");

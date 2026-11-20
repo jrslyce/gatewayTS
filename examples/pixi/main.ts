@@ -1,5 +1,5 @@
 import {
-  HypecadeClient,
+  HypelineClient,
   GameActionCategory,
   GameActionState,
   InfiniteCount,
@@ -9,7 +9,7 @@ import {
 
 declare const PIXI: any;
 
-const gateway = new HypecadeClient({
+const gateway = new HypelineClient({
   gameId: "gamelink-testing",
   stage: "production"
 });
@@ -32,7 +32,7 @@ let shields = 0;
 
 gateway.on("authentication", async ({ hasError }) => {
   if (hasError) return;
-  await gateway.setGameMetadata({ name: "Pixi Hypecade Demo" });
+  await gateway.setGameMetadata({ name: "Pixi Hypeline Demo" });
   await gateway.setGameTexts([{ label: "Shields", value: "0", icon: "fa-solid:shield" }]);
   await gateway.setGameActions([
     {

@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { GatewayClient, HypecadeClient, type HypecadeClientOptions } from "../src";
+import { GatewayClient, HypelineClient, type HypelineClientOptions } from "../src";
 import { resolveEndpoint } from "../src/protocol";
 import { MemoryStorage } from "../src/storage";
 import { lastSocket, MockWebSocket, replyToSent, sentAt, signIn } from "./mock-websocket";
 
 const action = { id: "heal", name: "Heal", impact: 1, description: "", count: 3 };
-const clients: HypecadeClient[] = [];
-function client(options: Partial<HypecadeClientOptions> = {}) {
-  const game = new HypecadeClient({
+const clients: HypelineClient[] = [];
+function client(options: Partial<HypelineClientOptions> = {}) {
+  const game = new HypelineClient({
     gameId: "my-game", websocket: MockWebSocket, reconnect: false, storage: new MemoryStorage(), ...options
   });
   clients.push(game);
@@ -20,9 +20,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("Hypecade compatibility and authentication", () => {
+describe("Hypeline compatibility and authentication", () => {
   it("uses the same client for both names and restores the legacy production key", async () => {
-    expect(HypecadeClient).toBe(GatewayClient);
+    expect(HypelineClient).toBe(GatewayClient);
     const storage = new MemoryStorage();
     storage.setItem("muxy.gateway.my-game.refreshToken", "old-session");
     const game = client({ gameId: " My-Game ", storage });

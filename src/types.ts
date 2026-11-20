@@ -14,11 +14,11 @@ export interface StorageAdapter {
   removeItem(key: string): void;
 }
 
-export interface HypecadeClientOptions {
+export interface HypelineClientOptions {
   gameId: string;
   stage?: Stage;
   autoConnect?: boolean;
-  endpoint?: string | ((stage: Stage, client: HypecadeClientOptions) => string);
+  endpoint?: string | ((stage: Stage, client: HypelineClientOptions) => string);
   storage?: StorageAdapter;
   storageKey?: string;
   rememberSession?: boolean;
@@ -29,8 +29,8 @@ export interface HypecadeClientOptions {
   logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
 }
 
-/** @deprecated Use HypecadeClientOptions. */
-export type GatewayClientOptions = HypecadeClientOptions;
+/** @deprecated Use HypelineClientOptions. */
+export type GatewayClientOptions = HypelineClientOptions;
 
 export interface ReconnectOptions {
   initialDelayMs?: number;
