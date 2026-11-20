@@ -1,6 +1,6 @@
 # Install Muxy Hypeline in my HTML5 game
 
-Use the game in this workspace. Follow the HTML5 walkthrough at https://jrslyce.github.io/hypeline-html5/ and its linked sample source. Integrate one real viewer action into my game and show how the broadcaster can link and unlink their Twitch channel.
+Use the game in this workspace. Follow the HTML5 walkthrough at https://muxy.github.io/hypeline-html5/ and its linked sample source. Integrate one real viewer action into my game and show how the broadcaster can link and unlink their Twitch channel.
 
 1. Inspect the game's entry point, build scripts, existing SDK usage, event handlers, and uncommitted changes. Identify the framework and reuse any existing client. Record the SDK revision. The package is private. Build the linked revision with Node.js 24 and npm ci. For a separate project, build and pack the SDK and install the local tarball, or use its built browser script. Preserve existing Gateway imports and session keys. Prefer HypelineClient in new code.
 2. Use gamelink-testing for the sample. Use my registered Game ID for my game. If a new permanent ID is needed, ask me which ID and game name to register. Add one broadcaster sign-in panel and one visible in-game alert showing the viewer and action for about six seconds. Keep PINs, JWTs, refresh tokens, and transaction IDs out of screenshots, source, logs, and your report.

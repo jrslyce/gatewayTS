@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const site = path.join(root, "docs/site");
 const out = path.join(root, "site-dist");
 const revision = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const source = "https://github.com/jrslyce/hypeline-html5/blob/" + revision;
+const source = "https://github.com/muxy/hypeline-html5/blob/" + revision;
 const escape = text => text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const prompt = await readFile(path.join(site, "install-hypeline.md"), "utf8");
 const template = await readFile(path.join(site, "index.html"), "utf8");

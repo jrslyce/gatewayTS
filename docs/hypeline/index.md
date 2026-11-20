@@ -1,6 +1,6 @@
 # Hypeline for HTML5 games
 
-New to the SDK? Start with the [interactive HTML5 walkthrough](https://jrslyce.github.io/hypeline-html5/) or give your coding agent the [installation prompt](../site/install-hypeline.md).
+New to the SDK? Start with the [interactive HTML5 walkthrough](https://muxy.github.io/hypeline-html5/) or give your coding agent the [installation prompt](../site/install-hypeline.md).
 
 Hypeline runs inside the broadcaster's game. A viewer chooses an action in the **Muxy Gateway** Twitch extension, your game applies the effect, and the game reports the outcome to GameLink.
 
@@ -8,7 +8,7 @@ Hypeline runs inside the broadcaster's game. A viewer chooses an action in the *
 
 1. Register your game's permanent ID at [the Muxy developer portal](https://dev.muxy.io/games). Use `gamelink-testing` for a sample. IDs are 3–64 lowercase letters or digits with optional single hyphens between them. The client trims whitespace and lowercases the ID.
 2. Have the broadcaster install and activate the Muxy Gateway extension on their channel. In its configuration, allow your game if Linked Games lists it, then request a new six-character code.
-3. Use the [auth widget](../../README.md#add-hypeline-to-your-game) or pass the code to `authenticateWithPin(code)`. The client trims and uppercases it. Check `response.hasError` before publishing. Connection failures and timeouts reject the promise. Keep the authentication result private because it contains credentials.
+3. Use the [auth widget](https://muxy.github.io/hypeline-html5/#setup) or pass the code to `authenticateWithPin(code)`. The client trims and uppercases it. Check `response.hasError` before publishing. Connection failures and timeouts reject the promise. Keep the authentication result private because it contains credentials.
 
 The default stage is `production`, including tests on your own channel. `staging` is for Muxy's internal environment. The hosted sandbox is retired. Existing test harnesses can still use the `sandbox` value with an explicit test endpoint.
 
@@ -107,3 +107,11 @@ Both sets of names resolve to the same implementation. The package name `muxy-ga
 Use the production Game ID and an HTTPS build at the game's actual origin. Set a test action to zero cost on your channel. With a separate viewer session, trigger the action once, observe the viewer alert and gameplay effect, await the acknowledgment, then change a health label and check that the action's remaining stock stays consumed. Disconnect and reconnect and verify a second action still arrives once. A local simulator checks game logic only.
 
 [Unity integration walkthrough](https://muxy.github.io/hypeline-unity/) · [GameLink action messages](https://github.com/muxy/gamelink-cpp/blob/16c6b9796ae02105153ac33482d83ac609398d2e/src/gateway_actions.cpp)
+
+## Work on the SDK and examples
+
+From the SDK checkout, run `npm ci` with Node.js 24. Use `npm run dev:tutorial` for the [vanilla healthpack demo](../../examples/vanilla) or `npm run dev:side-runner` for the [side-runner game](../../examples/side-runner). The [Phaser](../../examples/phaser) and [PixiJS](../../examples/pixi) examples show how to connect the SDK to a game engine.
+
+Run `npm run check`, `npm test`, and `npm run build` to verify the SDK. The build produces ESM, CommonJS, TypeScript declarations, and the browser bundle.
+
+Edit the walkthrough and agent prompt in [docs/site](../site). Build from the commit you want readers to use with `npm run docs:build`, then preview it with `npx vite preview --outDir site-dist`. To publish, copy the contents of `site-dist/`, including `.nojekyll`, into a separate checkout of `gh-pages`. Remove obsolete generated assets, review the diff, and commit and push the publishing branch.
