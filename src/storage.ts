@@ -17,9 +17,10 @@ export class MemoryStorage implements StorageAdapter {
 }
 
 export function defaultStorage(): StorageAdapter {
-  if (typeof globalThis.localStorage !== "undefined") {
-    return globalThis.localStorage;
+  try {
+    if (globalThis.localStorage) return globalThis.localStorage;
+  } catch {
+    // Embedded games may have no permission to access browser storage.
   }
-
   return new MemoryStorage();
 }

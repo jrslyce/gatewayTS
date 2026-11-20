@@ -1,116 +1,15 @@
-# Muxy Gateway HTML5
-<img width="1024" height="575" alt="13742799133437234472" src="https://github.com/user-attachments/assets/dea2f94d-065f-4cfd-8cde-94e22e9ca656" />
+# Muxy Hypeline for HTML5
 
+Let Twitch viewers trigger actions and vote in polls in your browser game.
 
-TypeScript-first HTML5 SDK for adding Muxy Gateway-style Twitch viewer
-interactivity to browser games.
+[Read the Hypeline HTML5 developer guide](https://muxy.github.io/hypeline-html5/) to connect a broadcaster, add a viewer action, and test it with the healthpack demo. To set up the SDK with a coding agent, use the [installation prompt](https://muxy.github.io/hypeline-html5/#agent).
 
-This package is a browser-native rewrite of the core ideas in
-`muxy/gateway-unity`: authentication, automatic refresh-token persistence,
-game metadata, game text, viewer actions, action validation/refund hooks,
-polling, Twitch Bits transaction events, reconnecting WebSocket transport, and
-optional prefab-like widgets.
+For a plain HTML game, save the [browser SDK](https://muxy.github.io/hypeline-html5/sdk/index.global.js) beside your HTML file and load it before your game script.
 
-## Install
-
-```sh
-npm install
-npm run build
+```html
+<script src="./index.global.js"></script>
 ```
 
-The package emits ESM, CommonJS, and browser global bundles in `dist/`.
+For TypeScript or a bundler, follow the [source installation steps](https://muxy.github.io/hypeline-html5/#install) to build and install the private `muxy-gateway-html5` package. Include the SDK commit from that step when reporting test results.
 
-## Quick Start
-
-```ts
-import {
-  GatewayClient,
-  GameActionCategory,
-  GameActionState,
-  InfiniteCount
-} from "muxy-gateway-html5";
-
-const gateway = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox",
-  autoConnect: true
-});
-
-await gateway.authenticateWithPin("PIN_FROM_EXTENSION");
-
-await gateway.setGameMetadata({
-  name: "My HTML5 Game",
-  theme: "default"
-});
-
-await gateway.setGameTexts([
-  { label: "Current Level", value: "Menu", icon: "fa-solid:dungeon" }
-]);
-
-await gateway.setGameActions([
-  {
-    id: "healthpack",
-    name: "Spawn Healthpack",
-    description: "Spawn a healthpack near the player",
-    icon: "fa-solid:heart",
-    category: GameActionCategory.Help,
-    state: GameActionState.Available,
-    impact: 2,
-    count: InfiniteCount,
-    onGameActionUsed: () => spawnHealthpack()
-  }
-]);
-
-// When the streamer unlinks or the game session ends, clear the persisted
-// Gateway state so the Twitch extension stops showing stale actions/text.
-await gateway.clearGameState();
-await gateway.deauthenticate();
-```
-
-## UI Helpers
-
-```ts
-import {
-  createAuthWidget,
-  createNotificationHistory,
-  createPollingWidget
-} from "muxy-gateway-html5";
-
-const container = document.querySelector("#gateway-ui") as HTMLElement;
-createAuthWidget(container, gateway);
-createNotificationHistory(container, gateway);
-createPollingWidget(container, gateway);
-```
-
-## Endpoint Notes
-
-The Unity package delegates WebSocket URL derivation to the native
-`cgamelink` library. This browser SDK exposes the endpoint as an override:
-
-```ts
-const gateway = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox",
-  endpoint: "wss://your-confirmed-gamelink-endpoint"
-});
-```
-
-Defaults are provided for the documented production and sandbox API hosts, but
-real Gateway deployments should confirm the active GameLink WebSocket endpoint
-for the game ID before going live.
-
-## Examples
-
-- `examples/vanilla`
-- `examples/phaser`
-- `examples/pixi`
-- `examples/side-runner`
-
-Each example shows authentication, one action, one game text update, and a poll.
-The side-runner is the most complete test game: it uses `gamelink-testing`,
-shows link state on the main menu, registers five viewer actions, and includes
-local simulation buttons for testing the in-game visual effects.
-
-## Reference
-
-The upstream Unity package is preserved under `reference/gateway-unity/`.
+Hypeline supports existing Muxy Gateway integrations. See the [SDK license](LICENSE) and [upstream notices](NOTICE.md).

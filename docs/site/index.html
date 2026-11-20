@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0d0d0d">
+<meta name="description" content="Build a Twitch viewer action into an HTML5 game with Muxy Hypeline. Run a healthpack demo, link a channel, and verify fulfillment.">
+<title>HTML5 SDK walkthrough · Muxy Hypeline</title>
+<link rel="icon" type="image/png" href="assets/muxy-logo.png">
+<link rel="stylesheet" href="assets/styles.css"><script defer src="assets/guide.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to walkthrough</a>
+<header class="bar">
+  <a class="brand" href="#overview"><img src="assets/muxy-logo.png" alt="Muxy"><span class="slash">/</span>Hypeline <small>Docs</small></a>
+  <div class="tools"><button id="search-open" aria-haspopup="dialog">Search docs <kbd>Ctrl K</kbd></button>
+  <a class="source-link" href="https://github.com/muxy/hypeline-html5">SDK source ↗</a>
+  <button id="menu" aria-controls="sidebar" aria-expanded="false">Menu</button></div>
+</header>
+<div class="layout">
+<aside id="sidebar"><div class="sdk"><span aria-hidden="true">◇</span> HTML5 SDK</div>
+<nav aria-label="Tutorial navigation">
+<p class="label">Get started</p>
+<a href="#overview">Overview</a><a href="#before">Before you start</a>
+<a href="#install"><b>01</b> Install the SDK</a><a href="#setup"><b>02</b> Set up the game</a>
+<a href="#action"><b>03</b> Configure the healthpack</a><a href="#local"><b>04</b> Test locally</a>
+<a href="#connect"><b>05</b> Connect Twitch</a><a href="#verify"><b>06</b> Verify a viewer action</a>
+<a href="#adapt"><b>07</b> Adapt it for your game</a>
+<p class="label">Help &amp; reference</p><a href="#agent">Install with an AI agent</a>
+<a href="#troubleshooting">Troubleshooting</a><a href="#reference">SDK reference</a>
+</nav><a class="sibling" href="https://muxy.github.io/hypeline-unity/">Unity SDK guide ↗</a>
+</aside>
+<main id="main">
+<section id="overview" class="hero">
+<p class="crumb">SDKs <span>/</span> HTML5 <span>/</span> Getting started</p>
+<p class="eyebrow">HTML5 SDK walkthrough</p><h1>Get started with Muxy Hypeline in HTML5</h1>
+<p class="lead">Give a Twitch viewer a healthpack they can send to your game. Their name appears on screen, health rises from 50 to 60, and the extension updates after the game confirms delivery.</p>
+<div class="meta"><span>Browser games</span><span>TypeScript &amp; JavaScript</span><span>Node.js 24</span></div>
+<div class="actions"><a class="button primary" href="#install">Start building →</a><a class="button" href="#agent">Install with an AI agent ↗</a></div>
+<div class="starter"><div><p class="label">Playable sample</p><h2>Spawn Healthpack</h2>
+<p>Try the player health control and six-second alert in your browser.</p><a href="demo/">Open the demo ↗</a></div>
+<div class="meter-art" aria-hidden="true"><strong>50 <i>→</i> 60</strong><div></div><small>PLAYER HEALTH</small></div></div>
+</section>
+<section id="before"><p class="eyebrow">Getting started</p><h2>Before you start</h2>
+<p>For the local walkthrough you need Git, Node.js 24, npm, and a browser. For viewer testing, use a broadcaster account, a separate viewer session, and an HTTPS game origin accepted by GameLink. The sample starts with the shared Game ID <code>gamelink-testing</code>. Register your own permanent ID in the <a href="https://dev.muxy.io/games">developer portal</a> before shipping.</p></section>
+<section id="install"><p class="eyebrow">Step 01</p><h2>Install the SDK</h2>
+<p>Clone the source and check out the revision used to build this walkthrough. Run the following in a terminal.</p>
+<pre><code>git clone https://github.com/muxy/hypeline-html5.git
+cd hypeline-html5
+git checkout {{revision}}
+npm ci
+npm run build
+npm run dev:tutorial</code></pre>
+<p>Open the local URL printed by Vite. To add the SDK to a separate game, run <code>npm pack</code> in this checkout and install the resulting tarball in your game. The package still uses the name <code>muxy-gateway-html5</code>. For a plain script tag, download the <a download href="sdk/index.global.js">browser bundle</a> and use <code>HypelineHTML5.HypelineClient</code>.</p>
+<p class="check"><strong>Checkpoint</strong> The demo opens at 50 health and the sign-in panel is visible.</p></section>
+<section id="setup"><p class="eyebrow">Step 02</p><h2>Set up the game</h2>
+<p>Open <a href="{{source}}/examples/vanilla/main.ts">the vanilla sample</a>. One client owns the game session. Mount the auth form outside the game canvas so the broadcaster can enter a code. Keep the viewer alert inside the area captured on stream.</p>
+<pre><code>import { HypelineClient, createAuthWidget } from "muxy-gateway-html5";
+
+const game = new HypelineClient({
+  gameId: "gamelink-testing",
+  rememberSession: false
+});
+createAuthWidget(document.querySelector("#gateway-ui"), game);</code></pre>
+<p>In TypeScript, check the element exists or use <code>document.querySelector&lt;HTMLElement&gt;("#gateway-ui")!</code> when the host is guaranteed by your markup.</p>
+<p class="check"><strong>Checkpoint</strong> One active client and one auth form serve the game.</p></section>
+<section id="action"><p class="eyebrow">Step 03</p><h2>Configure the healthpack</h2>
+<p>In the successful authentication callback, publish the game name, a Health text, and the action below. The full action list sets initial inventory, so publish it when initializing the catalog. Use <code>setGameTexts()</code> for subsequent health updates.</p>
+<dl class="fields"><div><dt>Action ID</dt><dd><code>healthpack</code></dd></div><div><dt>Viewer label</dt><dd>Spawn Healthpack</dd></div><div><dt>Category / state</dt><dd>Help / Available</dd></div><div><dt>Impact / stock</dt><dd>1 / 3 uses</dd></div></dl>
+<p>In <code>onGameActionUsed</code>, show the viewer name and action, then apply up to 10 health. Await <code>acceptGameAction(used, "Restored health")</code> after the effect succeeds. If health is already full, use <code>refundGameAction()</code>. The sample shows a distinct status for acknowledgment and for publishing Health.</p>
+<p class="check"><strong>Checkpoint</strong> One handler shows the alert, applies the effect, and reports the outcome.</p></section>
+<section id="local"><p class="eyebrow">Step 04</p><h2>Test locally</h2>
+<ol><li>Open the <a href="demo/">healthpack demo</a>. Select <strong>Add 10 health locally</strong> and watch health change to 60.</li>
+<li>Select <strong>Preview alert</strong>. The card names “Preview viewer” and “Spawn Healthpack” and clears after six seconds.</li>
+<li>Select <strong>Reset local demo</strong> to return to 50 before connecting.</li></ol>
+<p class="check"><strong>Checkpoint</strong> Both local controls work with no Twitch account. Transaction delivery is verified in step 06.</p></section>
+<section id="connect"><p class="eyebrow">Step 05</p><h2>Connect your Twitch channel</h2>
+<ol><li>Install and activate the <a href="https://dashboard.twitch.tv/extensions/i575hs2x9lb3u8hqujtezit03w1740">Muxy Gateway extension</a> on the broadcaster’s channel. In its configuration, allow your Game ID if it appears under Linked Games.</li>
+<li>Request a fresh six-character code. Enter it in the game’s Hypeline panel and select <strong>Authenticate</strong>. Codes expire after five minutes.</li>
+<li>Wait for <strong>Ready for viewer actions.</strong> in the game. Check that the extension displays Hypeline Healthpack, the Health text, and Spawn Healthpack.</li></ol>
+<p class="check"><strong>Checkpoint</strong> The viewer can see the action and Health 50. Keep codes and tokens out of shared logs and screenshots.</p></section>
+<section id="verify"><p class="eyebrow">Step 06</p><h2>Verify a viewer action</h2>
+<p>Set the action’s price to zero on your own channel for the test. From a separate viewer session, select Spawn Healthpack once. Watch the game directly first, then check the broadcast after its stream delay.</p>
+<ol><li>The game shows the viewer’s name and the action. Health increases once, from 50 to 60.</li>
+<li>The game shows <strong>Action acknowledged. Health published.</strong> after both server responses.</li>
+<li>The extension shows Health 60 and two remaining uses. Updating text preserves the consumed stock.</li></ol>
+<p class="check"><strong>Checkpoint</strong> Record delivery, alert, gameplay effect, acknowledgment, and extension state separately. If an acknowledgment times out, reconcile the transaction before retrying.</p></section>
+<section id="adapt"><p class="eyebrow">Step 07</p><h2>Adapt it for your game</h2>
+<p>Replace the sample health counter with your game’s effect. Disable actions while loading or paused. On unlink, clear the game state while authenticated, then deauthenticate in a <code>finally</code> block. Destroy the widgets and call <code>dispose()</code> when tearing down the game.</p>
+<p>Test a fresh code, an invalid code, a reconnect, and a reload of your deployed game. Existing projects can retain <code>GatewayClient</code> and <code>MuxyGatewayHTML5</code>. The wire protocol, extension identifier, and production session keys retain their Gateway names.</p>
+<p class="check"><strong>Checkpoint</strong> One real viewer action still produces one effect and a visible alert on the HTTPS origin you intend to ship.</p></section>
+<section id="agent"><p class="eyebrow">Help &amp; reference</p><h2>Install with an AI agent</h2>
+<p>Open your game project in your coding agent. Give it this prompt to integrate Hypeline, run the local checks, and record which parts of the Twitch round trip it verified.</p>
+<div class="actions"><button class="button primary" id="copy">Copy install prompt</button><a class="button" download href="install-hypeline.md">Download Markdown ↓</a></div><span id="copy-status" role="status"></span>
+<details><summary>Read the complete prompt</summary><pre id="prompt">{{prompt}}</pre></details></section>
+<section id="troubleshooting"><p class="eyebrow">Help &amp; reference</p><h2>Troubleshooting</h2>
+<details><summary>The browser cannot connect</summary><p>Open the browser’s Network panel, select the WebSocket request to <code>gamelink.muxy.io</code>, and check the handshake status. An HTTP 403 means the connection was refused before the game could send its Game ID or PIN. For the hosted demo, have the GameLink operator check the upgrade request from <code>https://muxy.github.io</code> in the service or edge logs. The demo already uses the shared <a href="https://dev.muxy.io/api/public/games/gamelink-testing">gamelink-testing registration</a>.</p><p>If the socket opens and GameLink declines sign-in, check that the Game ID is active, allow it if listed under Linked Games in the extension, and request a fresh code.</p></details>
+<details><summary>The code works but the action is missing</summary><p>Confirm the Game ID and broadcaster, verify the extension is active, and wait for game setup to finish. Check the action’s published state, remaining stock, and viewer placement.</p></details>
+<details><summary>Health changes but the alert or acknowledgment is missing</summary><p>Check that the alert is inside the captured game view, and that one handler applies the effect. Inspect the game’s acknowledgment status. Record any uncertain result before making another purchase.</p></details></section>
+<section id="reference"><p class="eyebrow">Resources</p><h2>SDK reference</h2>
+<ul><li><a href="{{source}}/docs/hypeline/index.md">HTML5 API, inventory, polls, sessions, and Gateway migration</a></li><li><a href="{{source}}/examples/vanilla/main.ts">Complete healthpack implementation</a></li>
+<li><a href="{{source}}/examples/phaser/main.ts">Phaser example</a> · <a href="{{source}}/examples/pixi/main.ts">PixiJS example</a></li><li><a href="https://muxy.github.io/hypeline-unity/">Hypeline for Unity</a></li></ul></section>
+</main>
+<aside class="rail" aria-label="Quick links"><p class="label">In this walkthrough</p><a href="#local">Local preview</a><a href="#verify">Live verification</a><a href="#agent">Agent prompt</a><a href="#reference">API reference</a></aside>
+</div>
+<dialog id="search"><form method="dialog"><label for="query">Search this walkthrough</label><button aria-label="Close search">Close</button></form>
+<input id="query" type="search" autocomplete="off" placeholder="Search steps, methods, or troubleshooting"><ul id="results"></ul></dialog>
+</body></html>

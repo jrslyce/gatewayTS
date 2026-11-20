@@ -1,21 +1,32 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Muxy Gateway HTML5 Vanilla Example</title>
-    <style>
-      body { margin: 0; background: #0f172a; color: white; font-family: system-ui, sans-serif; }
-      main { display: grid; gap: 16px; padding: 20px; }
-      canvas { width: min(100%, 720px); aspect-ratio: 16 / 9; background: #111827; border: 1px solid #334155; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <div id="gateway-ui"></div>
-      <canvas id="game" width="720" height="405"></canvas>
-      <button id="poll">Start Poll</button>
-    </main>
-    <script type="module" src="./main.ts"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Healthpack demo · Hypeline HTML5</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * {box-sizing:border-box} body {margin:0;color:#eee;background:#101515;font:17px/1.5 system-ui,sans-serif}
+    main {max-width:840px;margin:0 auto;padding:clamp(16px,4vw,48px)} h1 {margin:.15em 0 .5em}
+    .stage {background:#162324;border:1px solid #4e7779;padding:clamp(16px,4vw,32px)}
+    h2 {font-size:17px;margin:0} .health {font:700 clamp(40px,9vw,72px)/1.2 system-ui;margin:.12em 0}
+    meter {width:100%;height:24px;accent-color:#99cccc} #alert {min-height:2.5em;color:#abdfdf}
+    .controls {display:flex;flex-wrap:wrap;gap:8px;margin:16px 0} button,input {font:inherit;padding:6px 12px}
+    button {cursor:pointer} button:disabled {cursor:default} #status {min-height:1.5em} a {color:#b1e1df}
+  </style>
+</head>
+<body><main>
+  <h1>Healthpack demo</h1>
+  <div class="stage"><h2>Player health</h2><p class="health"><output id="health">50</output> / 100</p>
+    <meter id="meter" min="0" max="100" value="50" aria-label="Player health"></meter>
+    <p id="alert" role="status"></p>
+  </div>
+  <div class="controls"><button id="local" disabled>Add 10 health locally</button><button id="preview" disabled>Preview alert</button>
+    <button id="reset" disabled>Reset local demo</button></div>
+  <p>This demo uses the shared Game ID <code>gamelink-testing</code>.
+    <a href="https://dev.muxy.io/api/public/games/gamelink-testing" target="_blank" rel="noreferrer">Check its registration</a>.</p>
+  <div id="gateway-ui"></div><p id="status" role="status">Loading demo…</p>
+  <button id="poll" disabled>Start a 30-second poll</button>
+  <script type="module" src="./main.ts"></script>
+</main></body>
 </html>

@@ -1,12 +1,12 @@
 import {
   GameActionCategory,
   GameActionState,
-  GatewayClient,
+  HypelineClient,
   InfiniteCount,
   type GameAction,
   type GameActionUsed,
-  type GatewayEnvelope,
-  type GatewayError
+  type HypelineEnvelope,
+  type HypelineError
 } from "../../src";
 
 const GAME_ID = "gamelink-testing";
@@ -122,7 +122,7 @@ const healthReadout = document.querySelector("#health-readout") as HTMLElement;
 const distanceReadout = document.querySelector("#distance-readout") as HTMLElement;
 const heatReadout = document.querySelector("#heat-readout") as HTMLElement;
 
-const gateway = new GatewayClient({
+const gateway = new HypelineClient({
   gameId: GAME_ID,
   stage: "production",
   autoConnect: true,
@@ -131,7 +131,7 @@ const gateway = new GatewayClient({
 });
 
 function gatewayTrace(label: string, details?: unknown): void {
-  console.info(`[Muxy Gateway] ${label}`, details ?? "");
+  console.info(`[Hypeline] ${label}`, details ?? "");
   const item = document.createElement("li");
   const payload = typeof details === "undefined" || details === "" ? "" : ` ${JSON.stringify(details)}`;
   item.textContent = `${new Date().toLocaleTimeString()} ${label}${payload}`;
@@ -142,7 +142,7 @@ function gatewayTrace(label: string, details?: unknown): void {
   }
 }
 
-function summarizeEnvelope(envelope: GatewayEnvelope): Record<string, unknown> {
+function summarizeEnvelope(envelope: HypelineEnvelope): Record<string, unknown> {
   const data = envelope.data && typeof envelope.data === "object" ? (envelope.data as Record<string, unknown>) : undefined;
 
   return {
@@ -150,15 +150,13 @@ function summarizeEnvelope(envelope: GatewayEnvelope): Record<string, unknown> {
     target: envelope.params?.target ?? envelope.meta?.target,
     requestId: envelope.params?.request_id ?? envelope.meta?.request_id,
     dataKeys: data ? Object.keys(data).filter((key) => !["pin", "jwt", "refresh", "refreshToken"].includes(key)) : [],
-    errors: envelope.errors?.map(summarizeGatewayError)
+    errors: envelope.errors?.map(summarizeHypelineError)
   };
 }
 
-function summarizeGatewayError(error: GatewayError): Record<string, unknown> {
+function summarizeHypelineError(error: HypelineError): Record<string, unknown> {
   return {
-    status: error.status,
-    title: error.title,
-    detail: error.detail
+    status: error.status
   };
 }
 
@@ -197,16 +195,17 @@ gateway.on("connect", () => {
 });
 
 gateway.on("disconnect", (event) => {
-  gatewayTrace("disconnected", "code" in event ? { code: event.code, reason: event.reason } : {});
+  gatewayTrace("disconnected", "code" in event ? { code: event.code } : {});
   gatewayReady = false;
-  setGatewayStatus("Gateway disconnected. It will retry automatically.");
+  linked = false;
+  setGatewayStatus("Hypeline disconnected. It will retry automatically.");
 });
 
 gateway.on("authentication", (response) => {
   gatewayTrace("authentication", {
     hasError: response.hasError,
     twitchUsername: response.twitchUsername,
-    errors: response.errors?.map(summarizeGatewayError)
+    errors: response.errors?.map(summarizeHypelineError)
   });
   linked = !response.hasError;
   const errorDetail = response.errors?.[0]?.detail;
@@ -222,6 +221,10 @@ gateway.on("authentication", (response) => {
 });
 
 gateway.onActionUsed((used) => {
+  if (!running || runMode !== "muxy") {
+    void gateway.refundGameAction(used, "Game is unavailable").catch(() => gatewayTrace("Refund unconfirmed"));
+    return;
+  }
   applyViewerAbility(used.actionId as AbilityId, used.username || "A viewer", used);
 });
 
@@ -234,21 +237,22 @@ gateway.on("message", (envelope) => {
 });
 
 gateway.on("error", (error) => {
-  gatewayTrace("error", Array.isArray(error) ? error.map(summarizeGatewayError) : {});
+  gatewayTrace("error", Array.isArray(error) ? error.map(summarizeHypelineError) : {});
 });
 
 linkForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const pin = pinInput.value.trim().toUpperCase();
+  pinInput.value = "";
   if (!pin) {
     setGatewayStatus("Enter the Muxy link code from the Twitch extension.");
     return;
   }
 
-  setGatewayStatus("Linking with Muxy...");
+  setGatewayStatus("Linking with Hypeline...");
   void gateway.authenticateWithPin(pin).catch(() => {
     linked = false;
-    setGatewayStatus("Link failed. Check that the code is fresh and Gateway is connected.");
+    setGatewayStatus("Link failed. Check that the code is fresh and Hypeline is connected.");
   });
 });
 
@@ -256,9 +260,9 @@ unlinkButton.addEventListener("click", async () => {
   setGatewayStatus("Clearing Twitch extension state...");
   running = false;
 
-  await gateway.clearGameState().catch((error) => {
-    gatewayTrace("clear failed", error instanceof Error ? { message: error.message } : {});
-  });
+  if (gateway.isAuthenticated) {
+    await gateway.clearGameState().catch(() => gatewayTrace("Could not clear extension state"));
+  }
 
   linked = false;
   await gateway.deauthenticate();
@@ -288,7 +292,7 @@ function makeGatewayActions(): GameAction[] {
     description: ability.description,
     icon: ability.icon,
     category: ability.category,
-    state: running ? GameActionState.Available : GameActionState.Hidden,
+    state: running && runMode === "muxy" ? GameActionState.Available : GameActionState.Hidden,
     impact: ability.impact,
     count: InfiniteCount
   }));
@@ -305,6 +309,7 @@ function startRun(mode: RunMode): void {
 }
 
 function registerGatewayState(): void {
+  if (!linked) return;
   void gateway.setGameMetadata({
     name: GAME_NAME,
     theme: "default"
@@ -315,8 +320,9 @@ function registerGatewayState(): void {
 }
 
 function sendGameTexts(): void {
+  if (!linked) return;
   void gateway.setGameTexts([
-    { label: "Run State", value: running ? (runMode === "muxy" ? "Muxy Run" : "Demo Run") : "Menu", icon: "fa-solid:person-running" },
+    { label: "Run State", value: running ? (runMode === "muxy" ? "Hypeline Run" : "Demo Run") : "Menu", icon: "fa-solid:person-running" },
     { label: "Distance", value: `${Math.floor(distance)}m`, icon: "fa-solid:road" },
     { label: "Health", value: `${Math.max(0, Math.floor(health))}`, icon: "fa-solid:heart" }
   ]).catch(() => undefined);
@@ -336,7 +342,7 @@ function trySavedRefreshToken(): void {
 
 function setGatewayStatus(message?: string): void {
   linkStatus.textContent = linked ? "Linked" : "Not linked";
-  gatewayStatus.textContent = message ?? (gatewayReady ? "Gateway websocket is ready." : "Gateway websocket is connecting.");
+  gatewayStatus.textContent = message ?? (gatewayReady ? "Hypeline WebSocket is ready." : "Hypeline WebSocket is connecting.");
   gatewayDot.classList.toggle("is-ready", linked);
 }
 
@@ -357,7 +363,7 @@ function resetRun(): void {
   player.grounded = true;
   updateHud();
   eventFeed.replaceChildren();
-  addFeed(runMode === "muxy" ? "Muxy run started. Waiting for Twitch viewers." : "Demo run started. Local simulator is active.");
+  addFeed(runMode === "muxy" ? "Hypeline run started. Waiting for Twitch viewers." : "Demo run started. Local simulator is active.");
 }
 
 function applyViewerAbility(actionId: AbilityId, username: string, used?: GameActionUsed): void {
@@ -395,7 +401,9 @@ function applyViewerAbility(actionId: AbilityId, username: string, used?: GameAc
   }
 
   if (used) {
-    void gateway.acceptGameAction(used, `${username} used ${ability.label}`).catch(() => undefined);
+    void gateway.acceptGameAction(used, `Applied ${ability.label}`).then(
+      () => gatewayTrace("Action acknowledged"), () => gatewayTrace("Acknowledgment unconfirmed")
+    );
   }
 }
 
@@ -630,7 +638,7 @@ function roundedRect(x: number, y: number, width: number, height: number, radius
 }
 
 function updateHud(): void {
-  modeReadout.textContent = runMode === "muxy" ? "Muxy" : "Demo";
+  modeReadout.textContent = runMode === "muxy" ? "Hypeline" : "Demo";
   healthReadout.textContent = `${Math.max(0, Math.floor(health))}`;
   distanceReadout.textContent = `${Math.floor(distance)}m`;
   heatReadout.textContent = `${heat}x`;

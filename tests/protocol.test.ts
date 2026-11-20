@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRequest, requestIdOf, resolveEndpoint } from "../src/protocol";
-import { DEFAULT_SANDBOX_ENDPOINT } from "../src";
+import { DEFAULT_PRODUCTION_ENDPOINT, DEFAULT_STAGING_ENDPOINT } from "../src";
 import { toPollUpdate } from "../src/poll";
 
 describe("protocol helpers", () => {
@@ -13,7 +13,9 @@ describe("protocol helpers", () => {
   });
 
   it("resolves default endpoints", () => {
-    expect(resolveEndpoint("sandbox")).toBe(DEFAULT_SANDBOX_ENDPOINT);
+    expect(resolveEndpoint("production")).toBe(DEFAULT_PRODUCTION_ENDPOINT);
+    expect(resolveEndpoint("staging")).toBe(DEFAULT_STAGING_ENDPOINT);
+    expect(() => resolveEndpoint("sandbox")).toThrow("retired");
     expect(resolveEndpoint("production", "wss://custom")).toBe("wss://custom");
   });
 

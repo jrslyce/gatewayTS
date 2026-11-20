@@ -1,4 +1,4 @@
-import { TypedEmitter } from "./events";
+import { notifyListener, TypedEmitter } from "./events";
 import { toPollUpdate } from "./poll";
 import { actionOf, createRequest, isOk, requestIdOf, resolveEndpoint, targetOf, RequestIds } from "./protocol";
 import { defaultStorage } from "./storage";
@@ -13,7 +13,7 @@ import {
   type GameActionUsed,
   type GameMetadata,
   type GameText,
-  type GatewayClientOptions,
+  type HypelineClientOptions,
   type GatewayEnvelope,
   type GatewayEventMap,
   type GatewayEventName,
@@ -26,6 +26,7 @@ import {
 import {
   normalizeAction,
   normalizeCount,
+  normalizeGameId,
   normalizeMetadata,
   normalizePoll,
   normalizeTexts
@@ -34,6 +35,9 @@ import {
 type PendingRequest = {
   resolve: (value: GatewayEnvelope) => void;
   reject: (reason: unknown) => void;
+  timer: ReturnType<typeof setTimeout>;
+  cancelQueued?: () => void;
+  authentication: boolean;
 };
 
 interface GatewayState {
@@ -53,30 +57,62 @@ type GatewayActionPayload = {
   count: number;
 };
 
-export class GatewayClient {
-  private readonly emitter = new TypedEmitter();
+export class HypelineClient {
+  private readonly listenerError = () => this.logger.warn("Hypeline event listener failed");
+  private readonly emitter = new TypedEmitter(this.listenerError);
+  private readonly recentTransactions = new Set<string>();
+  private sessionUser = "";
+  private pollOperation = Promise.resolve();
   private readonly requestIds = new RequestIds();
   private readonly pending = new Map<number, PendingRequest>();
   private readonly storage: StorageAdapter;
-  private readonly storageKey: string;
+  private readonly gameId: string;
+  private generation = 0;
+  private authAttempt = 0;
+  private disposed = false;
+  private sessionRefresh = "";
+  private restoreOnOpen = false;
+  private signingOut = false;
+  private logout?: Promise<void>;
+  private readonly deferredWrites = new Map<keyof GatewayState, {
+    promise: Promise<GatewayEnvelope>;
+    send: () => void;
+    reject: (reason: Error) => void;
+  }>();
   private readonly logger: Pick<Console, "debug" | "info" | "warn" | "error">;
   private readonly actionCallbacks = new Map<string, (used: GameActionUsed) => void>();
   private readonly state: GatewayState;
   private transport: BrowserTransport | null = null;
   private stage: Stage;
   private currentPoll: Required<PollConfiguration> | null = null;
+  private pollResults: number[] = [];
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly subscriptions = new Map<string, Promise<GatewayEnvelope>>();
+  private readonly desiredSubscriptions = new Set<string>();
   private authenticated = false;
-  private jwt = "";
 
-  constructor(private readonly options: GatewayClientOptions) {
-    if (!options.gameId) {
-      throw new Error("GatewayClient requires a gameId");
+  constructor(private readonly options: HypelineClientOptions) {
+    this.gameId = normalizeGameId(options.gameId);
+    if (options.requestTimeoutMs !== undefined &&
+      (!Number.isFinite(options.requestTimeoutMs) || options.requestTimeoutMs <= 0)) {
+      throw new Error("Gateway request timeout must be a positive finite number");
+    }
+    if (options.maxQueuedMessages !== undefined &&
+      (!Number.isInteger(options.maxQueuedMessages) || options.maxQueuedMessages < 1)) {
+      throw new Error("Gateway queue limit must be a positive integer");
     }
 
     this.stage = options.stage ?? "production";
     this.storage = options.storage ?? defaultStorage();
-    this.storageKey = options.storageKey ?? `muxy.gateway.${options.gameId}.refreshToken`;
+    if (this.stage === "production" && !options.storageKey && this.gameId !== options.gameId) {
+      const oldKey = `muxy.gateway.${options.gameId}.refreshToken`;
+      const saved = this.storage.getItem(oldKey);
+      if (saved && options.rememberSession !== false && !this.storage.getItem(this.storageKey)) {
+        this.storage.setItem(this.storageKey, saved);
+      }
+      this.storage.removeItem(oldKey);
+    }
+    if (options.rememberSession === false) this.storage.removeItem(this.storageKey);
     this.logger = options.logger ?? console;
     this.state = {};
 
@@ -89,7 +125,14 @@ export class GatewayClient {
     return this.authenticated;
   }
 
+  private get storageKey(): string {
+    // Existing production installs and explicit custom keys keep their saved session.
+    const base = this.options.storageKey ?? `muxy.gateway.${this.gameId}.refreshToken`;
+    return this.stage === "production" ? base : `${base}.${this.stage}`;
+  }
+
   get refreshToken(): string {
+    if (this.options.rememberSession === false) return this.sessionRefresh;
     return this.storage.getItem(this.storageKey) ?? "";
   }
 
@@ -124,66 +167,144 @@ export class GatewayClient {
   }
 
   connect(): void {
-    const endpoint = resolveEndpoint(this.stage, (stage) => {
-      if (typeof this.options.endpoint === "function") {
-        return this.options.endpoint(stage, this.options);
-      }
-      return resolveEndpoint(stage, this.options.endpoint);
-    });
+    if (this.disposed || this.signingOut) throw new Error("Hypeline client is closed");
+    if (this.transport) {
+      this.transport.connect();
+      return;
+    }
+    const override = this.options.endpoint;
+    const endpoint = resolveEndpoint(this.stage, typeof override === "function"
+      ? override(this.stage, this.options) : override);
 
-    this.transport = new BrowserTransport({
+    const transport: BrowserTransport = new BrowserTransport({
       url: endpoint,
       websocket: this.options.websocket,
       reconnect: this.options.reconnect,
-      onOpen: (event) => this.emitter.emit("connect", event),
-      onClose: (event) => this.emitter.emit("disconnect", event),
+      maxQueuedMessages: this.options.maxQueuedMessages,
+      onOpen: (event) => {
+        const restore = this.restoreOnOpen;
+        this.restoreOnOpen = false;
+        const attempt = this.authAttempt;
+        this.emitter.emit("connect", event);
+        if (restore && this.transport === transport && this.authAttempt === attempt && this.sessionRefresh) {
+          void this.authenticateWithRefreshToken(this.sessionRefresh).catch(() => undefined);
+        }
+      },
+      onClose: (event) => {
+        if (this.transport !== transport) return;
+        this.restoreOnOpen = !!this.sessionRefresh;
+        this.endSession();
+        this.emitter.emit("disconnect", event);
+      },
       onError: (event) => this.emitter.emit("error", event),
       onMessage: (message) => this.receive(message)
     });
-    this.transport.connect();
+    this.transport = transport;
+    try {
+      transport.connect();
+    } catch (error) {
+      this.transport = null;
+      throw error;
+    }
+  }
+
+  private endSession(): void {
+    ++this.generation;
+    this.authenticated = false;
+    this.subscriptions.clear();
+    this.currentPoll = null;
+    this.pollResults = [];
+    this.clearPollTimer();
+    const error = new Error("Gateway connection closed before the request completed");
+    this.rejectPendingRequests(error);
+    for (const write of this.deferredWrites.values()) write.reject(error);
+    this.deferredWrites.clear();
   }
 
   disconnect(): void {
-    this.transport?.disconnect();
+    const transport = this.transport;
     this.transport = null;
+    this.restoreOnOpen = false;
+    this.sessionRefresh = "";
+    this.sessionUser = "";
+    this.recentTransactions.clear();
+    this.endSession();
+    transport?.disconnect();
+    if (transport) this.emitter.emit("disconnect", new Event("disconnect"));
   }
 
-  runInSandbox(): void {
-    this.stage = "sandbox";
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.disconnect();
+    this.emitter.clear();
+    this.actionCallbacks.clear();
+    this.desiredSubscriptions.clear();
+  }
+
+  runInStaging(): void {
+    this.disconnect();
+    this.stage = "staging";
+    this.connect();
+  }
+
+  /** @deprecated The hosted sandbox has retired. Use production for channel tests. */
+  runInSandbox(): void {
+    this.disconnect();
+    this.stage = "sandbox";
     this.connect();
   }
 
   runInProduction(): void {
-    this.stage = "production";
     this.disconnect();
+    this.stage = "production";
     this.connect();
   }
 
   async authenticateWithPin(pin: string): Promise<AuthenticationResponse> {
-    const response = await this.request("authenticate", undefined, {
-      pin,
-      client_id: GATEWAY_EXTENSION_CLIENT_ID,
-      game_id: this.options.gameId
-    });
-    return this.handleAuthenticationResponse(response);
+    const code = pin.trim().toUpperCase();
+    if (!/^[A-Z0-9]{6}$/.test(code)) throw new Error("Enter the six-character Twitch link code");
+    return this.authenticate({ pin: code });
   }
 
   async authenticateWithRefreshToken(refresh = this.refreshToken): Promise<AuthenticationResponse> {
-    const response = await this.request("authenticate", undefined, {
-      refresh,
-      client_id: GATEWAY_EXTENSION_CLIENT_ID,
-      game_id: this.options.gameId
-    });
-    return this.handleAuthenticationResponse(response);
+    if (!refresh.trim()) throw new Error("A refresh token is required");
+    return this.authenticate({ refresh });
   }
 
-  async deauthenticate(): Promise<void> {
-    this.storage.removeItem(this.storageKey);
+  private async authenticate(credentials: { pin: string } | { refresh: string }): Promise<AuthenticationResponse> {
+    this.restoreOnOpen = false;
+    const generation = this.generation;
+    const attempt = ++this.authAttempt;
     this.authenticated = false;
-    this.jwt = "";
-    this.sendFireAndForget("deauthenticate");
-    this.disconnect();
+    const response = await this.request("authenticate", undefined, {
+      ...credentials, client_id: GATEWAY_EXTENSION_CLIENT_ID, game_id: this.gameId
+    });
+    if (this.generation !== generation || this.authAttempt !== attempt) throw new Error("Session changed");
+    return this.handleAuthenticationResponse(response, "refresh" in credentials ? credentials.refresh : "");
+  }
+
+  deauthenticate(): Promise<void> {
+    return this.logout ??= this.signOut().finally(() => { this.logout = undefined; });
+  }
+
+  private async signOut(): Promise<void> {
+    this.signingOut = true;
+    const transport = this.transport;
+    this.endSession();
+    this.sessionRefresh = "";
+    this.restoreOnOpen = false;
+    try {
+      this.storage.removeItem(this.storageKey);
+      if (transport?.isOpen) {
+        transport.send(createRequest("deauthenticate", this.requestIds.next()));
+        await transport.drain(1000);
+      }
+    } finally {
+      this.disconnect();
+      this.desiredSubscriptions.clear();
+      this.signingOut = false;
+    }
   }
 
   async clearGameState(): Promise<GatewayEnvelope> {
@@ -191,32 +312,33 @@ export class GatewayClient {
     this.state.metadata = normalizeMetadata({ name: "", logo: "", theme: "" });
     this.state.actions = [];
     this.state.texts = [];
-    return this.publishGatewayState();
+    const responses = await Promise.all([
+      this.publishState("metadata"), this.publishState("actions"), this.publishState("texts")
+    ]);
+    return responses[2];
   }
 
   async setGameMetadata(metadata: GameMetadata): Promise<GatewayEnvelope> {
     this.state.metadata = normalizeMetadata(metadata);
-    return this.publishGatewayState();
+    return this.publishState("metadata");
   }
 
   async setGameTexts(texts: GameText[]): Promise<GatewayEnvelope> {
     this.state.texts = normalizeTexts(texts);
-    return this.publishGatewayState();
+    return this.publishState("texts");
   }
 
   async setGameActions(actions: GameAction[]): Promise<GatewayEnvelope> {
+    const normalized = actions.map(normalizeAction);
+    if (new Set(normalized.map(action => action.id)).size !== actions.length) {
+      throw new Error("Duplicate action ID");
+    }
+    this.state.actions = normalized;
     this.actionCallbacks.clear();
-    this.state.actions = actions.map((action) => {
-      if (action.onGameActionUsed) {
-        this.actionCallbacks.set(action.id, action.onGameActionUsed);
-      }
-      return normalizeAction(action);
-    });
-
-    void this.subscribeToTransactions().catch((error) => {
-      this.logger.warn("Gateway transaction subscription failed", error);
-    });
-    return this.publishGatewayState();
+    for (const action of actions) {
+      if (action.onGameActionUsed) this.actionCallbacks.set(action.id, action.onGameActionUsed);
+    }
+    return this.publishState("actions");
   }
 
   async enableGameAction(id: string): Promise<GatewayEnvelope> {
@@ -228,19 +350,16 @@ export class GatewayClient {
   }
 
   async setMaximumGameActionCount(id: string, count: number): Promise<GatewayEnvelope> {
-    return this.setGameActionCount(id, count);
+    return this.updateAction(id, { count: normalizeCount(count) });
   }
 
   async setGameActionCount(id: string, count: number): Promise<GatewayEnvelope> {
-    const action = this.findAction(id);
-    action.count = normalizeCount(count);
-    return this.publishGatewayState();
+    return this.updateAction(id, { inventory: normalizeCount(count) });
   }
 
   async incrementGameActionCount(id: string, delta: number): Promise<GatewayEnvelope> {
-    const action = this.findAction(id);
-    action.count = normalizeCount(action.count + Math.trunc(delta));
-    return this.publishGatewayState();
+    if (!Number.isInteger(delta) || Math.abs(delta) > 0x7fffffff) throw new Error("Invalid inventory delta");
+    return this.updateAction(id, { delta_inventory: { change: delta } });
   }
 
   async decrementGameActionCount(id: string, delta: number): Promise<GatewayEnvelope> {
@@ -248,6 +367,7 @@ export class GatewayClient {
   }
 
   async acceptGameAction(used: GameActionUsed, description: string): Promise<GatewayEnvelope> {
+    this.requireAuthentication();
     return this.request("validate", "transaction", {
       transaction_id: used.transactionId,
       details: description
@@ -255,6 +375,7 @@ export class GatewayClient {
   }
 
   async refundGameAction(used: GameActionUsed, _description: string): Promise<GatewayEnvelope> {
+    this.requireAuthentication();
     return this.request("refund", "transaction", {
       transaction_id: used.transactionId,
       user_id: used.userId
@@ -263,61 +384,111 @@ export class GatewayClient {
 
   async startPoll(config: PollConfiguration): Promise<GatewayEnvelope> {
     const poll = normalizePoll(config);
-    this.currentPoll = poll;
-
-    const response = await this.request("create", "poll", {
-      poll_id: poll.id,
-      prompt: poll.prompt,
-      options: poll.options,
-      user_data: {
-        gateway: true,
-        location: poll.location,
-        mode: poll.mode,
-        duration_in_seconds: poll.durationInSeconds
-      }
+    this.requireAuthentication();
+    return this.serializePoll(async () => {
+      if (this.currentPoll) await this.closePoll(false);
+      this.requireAuthentication();
+      return this.openPoll(poll);
     });
+  }
 
-    await this.request("subscribe", "poll", { topic_id: poll.id });
+  private serializePoll<T>(operation: () => Promise<T>): Promise<T> {
+    const generation = this.generation;
+    const result = this.pollOperation.then(() => {
+      if (generation !== this.generation) throw new Error("Session changed");
+      return operation();
+    });
+    this.pollOperation = result.then(() => undefined, () => undefined);
+    return result;
+  }
 
-    if (poll.durationInSeconds > 0) {
-      this.pollTimer = setTimeout(() => {
-        void this.stopPoll(true);
-      }, poll.durationInSeconds * 1000);
+  private async openPoll(poll: Required<PollConfiguration>): Promise<GatewayEnvelope> {
+    const generation = this.generation;
+    this.currentPoll = poll;
+    this.pollResults = [];
+    let created = false;
+
+    try {
+      const response = await this.request("create", "poll", {
+        poll_id: poll.id,
+        prompt: poll.prompt,
+        options: poll.options,
+        user_data: {
+          gateway: true,
+          location: poll.location,
+          mode: poll.mode,
+          duration_in_seconds: poll.durationInSeconds
+        }
+      });
+
+      if (this.generation !== generation) throw new Error("Session changed");
+      created = true;
+      await this.request("subscribe", "poll", { topic_id: poll.id });
+      if (this.generation !== generation) throw new Error("Session changed");
+
+      if (poll.durationInSeconds > 0) {
+        this.pollTimer = setTimeout(() => {
+          void this.serializePoll(async () => {
+            if (this.currentPoll === poll) await this.closePoll(true);
+          }).catch(() => this.logger.warn("Hypeline poll cleanup failed"));
+        }, poll.durationInSeconds * 1000);
+      }
+
+      return response;
+    } catch (error) {
+      if (this.currentPoll === poll) {
+        this.currentPoll = null;
+        if (created && this.generation === generation) {
+          await this.request("delete", "poll", { poll_id: poll.id }).catch(() => undefined);
+        }
+      }
+      throw error;
     }
-
-    return response;
   }
 
   async stopPoll(final = false): Promise<GatewayEnvelope | undefined> {
+    return this.serializePoll(() => this.closePoll(final));
+  }
+
+  private async closePoll(final: boolean): Promise<GatewayEnvelope | undefined> {
     if (!this.currentPoll) {
       return undefined;
     }
 
+    const generation = this.generation;
     const poll = this.currentPoll;
     this.clearPollTimer();
-    this.currentPoll = null;
 
     if (final) {
-      this.emitPollUpdate(toPollUpdate(poll.id, [], true));
+      this.emitPollUpdate(toPollUpdate(poll.id, this.pollResults, true));
     }
+    this.currentPoll = null;
+    this.pollResults = [];
 
+    if (this.generation !== generation) throw new Error("Session changed");
     await this.request("unsubscribe", "poll", { topic_id: poll.id }).catch(() => undefined);
+    if (this.generation !== generation) throw new Error("Session changed");
     return this.request("delete", "poll", { poll_id: poll.id });
   }
 
   async subscribeToTransactions(sku = "*"): Promise<GatewayEnvelope> {
-    return this.request("subscribe", "twitchPurchaseBits", { sku });
+    this.requireAuthentication();
+    const existing = this.subscriptions.get(sku);
+    if (existing) return existing;
+    const subscription = this.request("subscribe", "twitchPurchaseBits", { sku });
+    this.subscriptions.set(sku, subscription);
+    try {
+      const response = await subscription;
+      if (this.subscriptions.get(sku) === subscription) this.desiredSubscriptions.add(sku);
+      return response;
+    } catch (error) {
+      if (this.subscriptions.get(sku) === subscription) this.subscriptions.delete(sku);
+      throw error;
+    }
   }
 
   sendRaw(envelope: GatewayEnvelope): void {
     this.ensureTransport();
-    this.transport?.send(envelope);
-  }
-
-  private sendFireAndForget<TData>(action: string, target?: string, data?: TData): void {
-    this.ensureTransport();
-    const envelope = createRequest(action, this.requestIds.next(), target, data);
-    this.emitter.emit("request", envelope);
     this.transport?.send(envelope);
   }
 
@@ -327,22 +498,46 @@ export class GatewayClient {
     data?: TData
   ): Promise<GatewayEnvelope> {
     this.ensureTransport();
-    const id = this.requestIds.next();
+    if (this.signingOut) throw new Error("Sign-out in progress");
+    if (this.pending.size >= 0xfffe) throw new Error("Too many pending requests");
+    let id = this.requestIds.next();
+    while (this.pending.has(id)) id = this.requestIds.next();
     const envelope = createRequest(action, id, target, data);
-    this.emitter.emit("request", envelope);
 
     const pending = new Promise<GatewayEnvelope>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timeoutMs = this.options.requestTimeoutMs ?? 30_000;
+      const timer = setTimeout(() => {
+        const entry = this.pending.get(id);
+        if (!entry) return;
+        entry.cancelQueued?.();
+        this.pending.delete(id);
+        entry.reject(new Error(`Gateway request ${id} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer, authentication: action === "authenticate" });
     });
 
-    this.transport?.send(envelope);
+    try {
+      const entry = this.pending.get(id)!;
+      entry.cancelQueued = this.transport!.send(envelope);
+      this.emitter.emit("request", diagnosticEnvelope(envelope, entry.authentication));
+    } catch (error) {
+      const entry = this.pending.get(id);
+      if (entry) {
+        clearTimeout(entry.timer);
+        this.pending.delete(id);
+        entry.reject(error);
+      }
+    }
     return pending;
   }
 
   private receive(envelope: GatewayEnvelope): void {
-    this.emitter.emit("message", envelope);
-    const hadPendingRequest = this.resolvePending(envelope);
-    this.routeEvent(envelope, hadPendingRequest);
+    const id = requestIdOf(envelope);
+    const auth = actionOf(envelope) === "authenticate" || targetOf(envelope) === "authentication" ||
+      (id !== undefined && this.pending.get(id)?.authentication === true);
+    this.emitter.emit("message", diagnosticEnvelope(envelope, auth));
+    this.resolvePending(envelope);
+    this.routeEvent(envelope, auth);
   }
 
   private resolvePending(envelope: GatewayEnvelope): boolean {
@@ -357,7 +552,8 @@ export class GatewayClient {
     }
 
     this.pending.delete(id);
-    if (isOk(envelope) || actionOf(envelope) === "authenticate") {
+    clearTimeout(pending.timer);
+    if (isOk(envelope) || pending.authentication) {
       pending.resolve(envelope);
     } else {
       pending.reject(envelope.errors);
@@ -365,24 +561,17 @@ export class GatewayClient {
     return true;
   }
 
-  private routeEvent(envelope: GatewayEnvelope, hadPendingRequest = false): void {
+  private routeEvent(envelope: GatewayEnvelope, auth: boolean): void {
     if (envelope.errors?.length) {
-      this.emitter.emit("error", envelope.errors);
-      this.emitter.emit("debug", envelope.errors);
+      const errors = diagnosticEnvelope(envelope, auth).errors!;
+      this.emitter.emit("error", errors);
+      this.emitter.emit("debug", errors);
     }
 
     const action = actionOf(envelope);
     const target = targetOf(envelope);
 
-    if (target === "authentication" || action === "authenticate") {
-      if (!hadPendingRequest) {
-        const response = this.toAuthenticationResponse(envelope);
-        this.emitter.emit("authentication", response);
-      }
-      return;
-    }
-
-    if (envelope.errors?.length) {
+    if (auth || envelope.errors?.length || !this.authenticated) {
       return;
     }
 
@@ -390,6 +579,9 @@ export class GatewayClient {
       const data = envelope.data as { topic_id?: string; results?: number[] } | undefined;
       const pollId = data?.topic_id ?? this.currentPoll?.id;
       if (pollId && Array.isArray(data?.results)) {
+        if (this.currentPoll?.id === pollId) {
+          this.pollResults = [...data.results];
+        }
         this.emitPollUpdate(toPollUpdate(pollId, data.results));
       }
       return;
@@ -401,16 +593,29 @@ export class GatewayClient {
     }
   }
 
-  private handleAuthenticationResponse(envelope: GatewayEnvelope): AuthenticationResponse {
+  private handleAuthenticationResponse(envelope: GatewayEnvelope, previousRefresh: string): AuthenticationResponse {
     const response = this.toAuthenticationResponse(envelope);
     this.authenticated = !response.hasError;
 
-    if (response.jwt) {
-      this.jwt = response.jwt;
-    }
-
-    if (response.refreshToken) {
-      this.storage.setItem(this.storageKey, response.refreshToken);
+    if (response.hasError) {
+      this.sessionRefresh = "";
+      this.storage.removeItem(this.storageKey);
+      for (const write of this.deferredWrites.values()) write.reject(new Error("Authentication failed"));
+      this.deferredWrites.clear();
+    } else {
+      if (response.twitchUsername !== this.sessionUser) {
+        this.recentTransactions.clear();
+        this.subscriptions.clear();
+      }
+      this.sessionUser = response.twitchUsername;
+      this.sessionRefresh = response.refreshToken || previousRefresh;
+      if (this.options.rememberSession !== false) {
+        if (this.sessionRefresh) this.storage.setItem(this.storageKey, this.sessionRefresh);
+        else this.storage.removeItem(this.storageKey);
+      }
+      for (const sku of this.desiredSubscriptions) this.subscribeInBackground(sku);
+      for (const write of this.deferredWrites.values()) write.send();
+      this.deferredWrites.clear();
     }
 
     this.emitter.emit("authentication", response);
@@ -419,56 +624,70 @@ export class GatewayClient {
 
   private toAuthenticationResponse(envelope: GatewayEnvelope): AuthenticationResponse {
     const data = (envelope.data ?? {}) as Record<string, unknown>;
+    const jwt = typeof data.jwt === "string" ? data.jwt : "";
+    const errors = envelope.errors?.length ? envelope.errors :
+      jwt ? undefined : [{ title: "Authentication response did not include a session token" }];
     return {
-      jwt: String(data.jwt ?? ""),
+      jwt,
       refreshToken: String(data.refresh ?? data.refreshToken ?? ""),
       twitchUsername: String(data.twitch_name ?? data.twitchUsername ?? data.username ?? ""),
-      hasError: Boolean(envelope.errors?.length),
-      errors: envelope.errors
+      hasError: Boolean(errors),
+      errors
     };
   }
 
-  private async publishGatewayState(): Promise<GatewayEnvelope> {
-    const requests: Promise<GatewayEnvelope>[] = [];
+  private publishState(key: keyof GatewayState): Promise<GatewayEnvelope> {
+    this.ensureTransport();
+    if (this.authenticated) return this.writeState(key);
+    const existing = this.deferredWrites.get(key);
+    if (existing) return existing.promise;
 
-    if (this.state.metadata) {
-      requests.push(this.request("set", "gameMetadata", this.state.metadata));
-    }
-
-    if (this.state.actions) {
-      requests.push(
-        this.request("set", "gatewayActions", {
-          actions: this.state.actions.map((action) => this.toGatewayActionPayload(action))
-        })
-      );
-    }
-
-    if (this.state.texts) {
-      requests.push(
-        this.request("patch", "state", {
-          state_id: "channel",
-          state: [
-            {
-              op: "add",
-              path: "/game/text/game_data",
-              value: this.state.texts
-            }
-          ]
-        })
-      );
-    }
-
-    if (requests.length === 0) {
-      return this.request("set", "gameMetadata", { name: "", logo: "", theme: "" });
-    }
-
-    const responses = await Promise.all(requests);
-    return responses[responses.length - 1] as GatewayEnvelope;
+    let send!: () => void;
+    let cancel!: (error: Error) => void;
+    const promise = new Promise<GatewayEnvelope>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.deferredWrites.delete(key);
+        reject(new Error("State update timed out waiting for authentication"));
+      }, this.options.requestTimeoutMs ?? 30_000);
+      send = () => { clearTimeout(timer); resolve(this.writeState(key)); };
+      cancel = error => { clearTimeout(timer); reject(error); };
+    });
+    this.deferredWrites.set(key, { promise, send, reject: cancel });
+    return promise;
   }
 
-  private async setActionState(id: string, state: GameActionState): Promise<GatewayEnvelope> {
-    this.findAction(id).state = state;
-    return this.publishGatewayState();
+  private writeState(key: keyof GatewayState): Promise<GatewayEnvelope> {
+    if (key === "metadata") return this.request("set", "gameMetadata", this.state.metadata);
+    if (key === "actions") {
+      if (this.state.actions?.length) this.subscribeInBackground("*");
+      return this.request("set", "gatewayActions", {
+        actions: (this.state.actions ?? []).map(action => this.toGatewayActionPayload(action))
+      });
+    }
+    return this.request("patch", "state", {
+      state_id: "channel",
+      state: [{ op: "add", path: "/game/text/game_data", value: this.state.texts }]
+    });
+  }
+
+  private subscribeInBackground(sku: string): void {
+    if (!this.subscriptions.has(sku)) {
+      void this.subscribeToTransactions(sku).catch(() => this.logger.warn("Hypeline subscription failed"));
+    }
+  }
+
+  private requireAuthentication(): void {
+    if (!this.authenticated || this.signingOut || this.disposed) throw new Error("Sign in to Hypeline first");
+  }
+
+  private updateAction(id: string, change: Record<string, unknown>): Promise<GatewayEnvelope> {
+    this.requireAuthentication();
+    this.findAction(id);
+    return this.request("set", "gatewayActionState", { id, ...change });
+  }
+
+  private setActionState(id: string, state: GameActionState): Promise<GatewayEnvelope> {
+    return this.updateAction(id, { state: this.toGatewayActionState(state) });
   }
 
   private findAction(id: string): ReturnType<typeof normalizeAction> {
@@ -512,7 +731,7 @@ export class GatewayClient {
   }
 
   private emitPollUpdate(update: PollUpdate): void {
-    this.currentPoll?.onPollUpdate(update);
+    if (this.currentPoll?.id === update.pollId) notifyListener(this.currentPoll.onPollUpdate, update, this.listenerError);
     this.emitter.emit("pollUpdate", update);
   }
 
@@ -526,6 +745,11 @@ export class GatewayClient {
       username: String(raw.username ?? raw.displayName ?? "")
     };
 
+    if (!bits.transactionId || this.recentTransactions.has(bits.transactionId)) return;
+    this.recentTransactions.add(bits.transactionId);
+    if (this.recentTransactions.size > 1024) {
+      this.recentTransactions.delete(this.recentTransactions.values().next().value!);
+    }
     this.emitter.emit("bitsUsed", bits);
 
     const actionId = String(raw.action_id ?? raw.actionId ?? raw.sku ?? "");
@@ -538,12 +762,14 @@ export class GatewayClient {
         username: bits.username,
         raw: data
       };
-      this.actionCallbacks.get(actionId)?.(used);
+      const callback = this.actionCallbacks.get(actionId);
+      if (callback) notifyListener(callback, used, this.listenerError);
       this.emitter.emit("actionUsed", used);
     }
   }
 
   private ensureTransport(): void {
+    if (this.disposed || this.signingOut) throw new Error("Hypeline client is closed");
     if (!this.transport) {
       this.connect();
     }
@@ -555,4 +781,28 @@ export class GatewayClient {
       this.pollTimer = null;
     }
   }
+
+  private rejectPendingRequests(error: Error): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.cancelQueued?.();
+      this.pending.delete(id);
+      pending.reject(error);
+    }
+  }
+}
+
+/** @deprecated Use HypelineClient. */
+export { HypelineClient as GatewayClient };
+
+function diagnosticEnvelope(envelope: GatewayEnvelope, authentication: boolean): GatewayEnvelope {
+  const data = envelope.data;
+  if (authentication || (data && typeof data === "object" &&
+      ["pin", "jwt", "refresh", "refreshToken"].some(key => key in data))) {
+    return {
+      action: actionOf(envelope), params: { request_id: requestIdOf(envelope), target: targetOf(envelope) },
+      errors: envelope.errors?.map(({ status }) => ({ status }))
+    };
+  }
+  return envelope;
 }
