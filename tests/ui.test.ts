@@ -32,6 +32,34 @@ describe("UI helpers", () => {
     replyToSent(0, { jwt: "jwt" });
   });
 
+  it.each([
+    { outcome: "closed socket", expected: "Check the GameLink WebSocket" },
+    { outcome: "rejected sign-in", expected: "Check Linked Games" }
+  ])("explains a $outcome without echoing credentials", async ({ outcome, expected }) => {
+    MockWebSocket.reset();
+    const gateway = client();
+    const target = document.createElement("div");
+    const widget = createAuthWidget(target, gateway);
+    try {
+      const input = target.querySelector("input")!;
+      input.value = "ABC123";
+      target.querySelector("form")!.requestSubmit();
+      await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
+      if (outcome === "closed socket") {
+        lastSocket().close();
+      } else {
+        lastSocket().receive({ meta: { request_id: 1 }, errors: [{ title: "Rejected ABC123" }] });
+      }
+      const status = target.querySelector('[role="status"]')!;
+      await vi.waitFor(() => expect(status.textContent).toContain(expected));
+      expect(status.textContent).not.toContain("ABC123");
+      expect(input.value).toBe("");
+    } finally {
+      widget.destroy();
+      gateway.dispose();
+    }
+  });
+
   it("renders notification history entries", async () => {
     MockWebSocket.reset();
     const target = document.createElement("div");
