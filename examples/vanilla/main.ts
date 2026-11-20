@@ -14,6 +14,7 @@ createPollingWidget(ui, client);
 const status = document.querySelector<HTMLElement>("#status")!;
 const alert = document.querySelector<HTMLElement>("#alert")!;
 const local = document.querySelector<HTMLButtonElement>("#local")!;
+const preview = document.querySelector<HTMLButtonElement>("#preview")!;
 const reset = document.querySelector<HTMLButtonElement>("#reset")!;
 const poll = document.querySelector<HTMLButtonElement>("#poll")!;
 let health = 50;
@@ -39,7 +40,9 @@ function heal() {
 const publishHealth = () => client.setGameTexts([{ label: "Health", value: String(health), icon: "fa-solid:heart" }]);
 local.onclick = heal;
 reset.onclick = () => { health = 50; draw(); alert.textContent = ""; };
-document.querySelector<HTMLButtonElement>("#preview")!.onclick = () => showAlert("Preview viewer");
+preview.onclick = () => showAlert("Preview viewer");
+local.disabled = preview.disabled = reset.disabled = false;
+status.textContent = "Local demo ready.";
 client.on("disconnect", () => { local.disabled = reset.disabled = false; poll.disabled = true; });
 
 client.on("authentication", async ({ hasError, twitchUsername }) => {
