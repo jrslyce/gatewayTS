@@ -46,14 +46,14 @@
 <p>Clone the source and check out the revision used to build this walkthrough. Run the following in a terminal.</p>
 <pre><code>git clone https://github.com/jrslyce/hypeline-html5.git
 cd hypeline-html5
-git checkout ba3239f015283d134d42ccd38daef289bfe5f8f6
+git checkout 5390aa627152ea836b9633927b2219db02724443
 npm ci
 npm run build
 npm run dev:tutorial</code></pre>
 <p>Open the local URL printed by Vite. To add the SDK to a separate game, run <code>npm pack</code> in this checkout and install the resulting tarball in your game. The package still uses the name <code>muxy-gateway-html5</code>. For a plain script tag, download the <a download href="sdk/index.global.js">browser bundle</a> and use <code>HypelineHTML5.HypelineClient</code>.</p>
 <p class="check"><strong>Checkpoint</strong> The demo opens at 50 health and the sign-in panel is visible.</p></section>
 <section id="setup"><p class="eyebrow">Step 02</p><h2>Set up the game</h2>
-<p>Open <a href="https://github.com/jrslyce/hypeline-html5/blob/ba3239f015283d134d42ccd38daef289bfe5f8f6/examples/vanilla/main.ts">the vanilla sample</a>. One client owns the game session. Mount the auth form outside the game canvas so the broadcaster can enter a code. Keep the viewer alert inside the area captured on stream.</p>
+<p>Open <a href="https://github.com/jrslyce/hypeline-html5/blob/5390aa627152ea836b9633927b2219db02724443/examples/vanilla/main.ts">the vanilla sample</a>. One client owns the game session. Mount the auth form outside the game canvas so the broadcaster can enter a code. Keep the viewer alert inside the area captured on stream.</p>
 <pre><code>import { HypelineClient, createAuthWidget } from "muxy-gateway-html5";
 
 const game = new HypelineClient({
@@ -107,8 +107,8 @@ Use the game in this workspace. Follow the HTML5 walkthrough at https://jrslyce.
 <details><summary>The code works but the action is missing</summary><p>Confirm the Game ID and broadcaster, verify the extension is active, and wait for game setup to finish. Check the action’s published state, remaining stock, and viewer placement.</p></details>
 <details><summary>Health changes but the alert or acknowledgment is missing</summary><p>Check that the alert is inside the captured game view, and that one handler applies the effect. Inspect the game’s acknowledgment status. Record any uncertain result before making another purchase.</p></details></section>
 <section id="reference"><p class="eyebrow">Resources</p><h2>SDK reference</h2>
-<ul><li><a href="https://github.com/jrslyce/hypeline-html5/blob/ba3239f015283d134d42ccd38daef289bfe5f8f6/docs/hypeline/index.md">HTML5 API, inventory, polls, sessions, and Gateway migration</a></li><li><a href="https://github.com/jrslyce/hypeline-html5/blob/ba3239f015283d134d42ccd38daef289bfe5f8f6/examples/vanilla/main.ts">Complete healthpack implementation</a></li>
-<li><a href="https://github.com/jrslyce/hypeline-html5/blob/ba3239f015283d134d42ccd38daef289bfe5f8f6/examples/phaser/main.ts">Phaser example</a> · <a href="https://github.com/jrslyce/hypeline-html5/blob/ba3239f015283d134d42ccd38daef289bfe5f8f6/examples/pixi/main.ts">PixiJS example</a></li><li><a href="https://muxy.github.io/hypeline-unity/">Hypeline for Unity</a></li></ul></section>
+<ul><li><a href="https://github.com/jrslyce/hypeline-html5/blob/5390aa627152ea836b9633927b2219db02724443/docs/hypeline/index.md">HTML5 API, inventory, polls, sessions, and Gateway migration</a></li><li><a href="https://github.com/jrslyce/hypeline-html5/blob/5390aa627152ea836b9633927b2219db02724443/examples/vanilla/main.ts">Complete healthpack implementation</a></li>
+<li><a href="https://github.com/jrslyce/hypeline-html5/blob/5390aa627152ea836b9633927b2219db02724443/examples/phaser/main.ts">Phaser example</a> · <a href="https://github.com/jrslyce/hypeline-html5/blob/5390aa627152ea836b9633927b2219db02724443/examples/pixi/main.ts">PixiJS example</a></li><li><a href="https://muxy.github.io/hypeline-unity/">Hypeline for Unity</a></li></ul></section>
 </main>
 <aside class="rail" aria-label="Quick links"><p class="label">In this walkthrough</p><a href="#local">Local preview</a><a href="#verify">Live verification</a><a href="#agent">Agent prompt</a><a href="#reference">API reference</a></aside>
 </div>
