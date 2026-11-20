@@ -1,5 +1,5 @@
 import type { GatewayEnvelope, Stage } from "./types";
-import { DEFAULT_PRODUCTION_ENDPOINT, DEFAULT_SANDBOX_ENDPOINT } from "./types";
+import { DEFAULT_PRODUCTION_ENDPOINT, DEFAULT_STAGING_ENDPOINT } from "./types";
 
 const MAX_REQUEST_ID = 0xffff;
 
@@ -17,15 +17,28 @@ export function resolveEndpoint(
   stage: Stage,
   endpoint?: string | ((stage: Stage) => string)
 ): string {
-  if (typeof endpoint === "function") {
-    return endpoint(stage);
+  const override = typeof endpoint === "function" ? endpoint(stage) : endpoint;
+  if (!override && stage === "sandbox") {
+    throw new Error("The sandbox service is retired. Use production or specify a test endpoint.");
   }
+  const address = override ?? (stage === "staging" ? DEFAULT_STAGING_ENDPOINT : DEFAULT_PRODUCTION_ENDPOINT);
+  validateEndpoint(address);
+  return address;
+}
 
-  if (endpoint) {
-    return endpoint;
+export function validateEndpoint(address: string): void {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    throw new Error("Invalid Hypecade WebSocket endpoint");
   }
-
-  return stage === "sandbox" ? DEFAULT_SANDBOX_ENDPOINT : DEFAULT_PRODUCTION_ENDPOINT;
+  const loopback = url.hostname === "localhost" || url.hostname === "[::1]" ||
+    /^127(?:\.\d{1,3}){3}$/.test(url.hostname);
+  if (url.username || url.password || url.hash ||
+      !(url.protocol === "wss:" || (url.protocol === "ws:" && loopback))) {
+    throw new Error("Use wss:// for remote endpoints or ws:// on loopback only");
+  }
 }
 
 export function createRequest<TData>(
@@ -65,7 +78,7 @@ export function actionOf(envelope: GatewayEnvelope): string {
 export function parseEnvelope(input: string): GatewayEnvelope {
   const parsed = JSON.parse(input) as GatewayEnvelope;
 
-  if (!parsed || typeof parsed !== "object") {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Gateway message was not an object");
   }
 

@@ -1,4 +1,4 @@
-export { GatewayClient } from "./client";
+export { HypecadeClient, GatewayClient } from "./client";
 export {
   createAuthWidget,
   createNotificationHistory,
@@ -10,6 +10,7 @@ export {
 export {
   DEFAULT_PRODUCTION_ENDPOINT,
   DEFAULT_SANDBOX_ENDPOINT,
+  DEFAULT_STAGING_ENDPOINT,
   GATEWAY_EXTENSION_CLIENT_ID,
   GameActionCategory,
   GameActionState,
@@ -22,7 +23,10 @@ export {
   type GameActionUsed,
   type GameMetadata,
   type GameText,
+  type HypecadeClientOptions,
   type GatewayClientOptions,
+  type GatewayEnvelope as HypecadeEnvelope,
+  type GatewayError as HypecadeError,
   type GatewayEnvelope,
   type GatewayError,
   type PollConfiguration,

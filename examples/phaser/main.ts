@@ -1,37 +1,45 @@
 import {
-  GatewayClient,
+  HypecadeClient,
   GameActionCategory,
   GameActionState,
   InfiniteCount,
+  createAuthWidget,
+  createNotificationHistory,
   PollMode
 } from "../../src";
 
 declare const Phaser: any;
 
-const gateway = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox"
+const gateway = new HypecadeClient({
+  gameId: "gamelink-testing",
+  stage: "production"
 });
 
+createAuthWidget(document.body, gateway);
+createNotificationHistory(document.body, gateway);
 let coins = 0;
 
-await gateway.setGameMetadata({ name: "Phaser Gateway Demo" });
-await gateway.setGameTexts([{ label: "Coins", value: "0", icon: "fa-solid:coins" }]);
-await gateway.setGameActions([
-  {
-    id: "coins",
-    name: "Drop Coins",
-    description: "Add coins to the player",
-    category: GameActionCategory.Help,
-    state: GameActionState.Available,
-    impact: 2,
-    count: InfiniteCount,
-    onGameActionUsed: async () => {
-      coins += 5;
-      await gateway.setGameTexts([{ label: "Coins", value: String(coins), icon: "fa-solid:coins" }]);
+gateway.on("authentication", async ({ hasError }) => {
+  if (hasError) return;
+  await gateway.setGameMetadata({ name: "Phaser Hypecade Demo" });
+  await gateway.setGameTexts([{ label: "Coins", value: "0", icon: "fa-solid:coins" }]);
+  await gateway.setGameActions([
+    {
+      id: "coins",
+      name: "Drop Coins",
+      description: "Add coins to the player",
+      category: GameActionCategory.Help,
+      state: GameActionState.Available,
+      impact: 2,
+      count: InfiniteCount,
+      onGameActionUsed: async (used) => {
+        coins += 5;
+        await gateway.acceptGameAction(used, "Applied viewer action");
+        await gateway.setGameTexts([{ label: "Coins", value: String(coins), icon: "fa-solid:coins" }]);
+      }
     }
-  }
-]);
+  ]);
+});
 
 new Phaser.Game({
   type: Phaser.AUTO,

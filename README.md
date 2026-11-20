@@ -1,116 +1,50 @@
-# Muxy Gateway HTML5
-<img width="1024" height="575" alt="13742799133437234472" src="https://github.com/user-attachments/assets/dea2f94d-065f-4cfd-8cde-94e22e9ca656" />
+# Hypecade HTML5 SDK
 
+Connect an HTML5 game to the Muxy Gateway Twitch extension. Hypecade handles broadcaster sign-in, viewer actions, Bits transactions, game text, and polls. It works with browser JavaScript and TypeScript, including Phaser and PixiJS.
 
-TypeScript-first HTML5 SDK for adding Muxy Gateway-style Twitch viewer
-interactivity to browser games.
+## Build and run the sample
 
-This package is a browser-native rewrite of the core ideas in
-`muxy/gateway-unity`: authentication, automatic refresh-token persistence,
-game metadata, game text, viewer actions, action validation/refund hooks,
-polling, Twitch Bits transaction events, reconnecting WebSocket transport, and
-optional prefab-like widgets.
-
-## Install
+From this checkout with Node.js 24 and npm installed, run
 
 ```sh
-npm install
+npm ci
+npm run build
+npm run dev:side-runner
+```
+
+Open the local URL printed by Vite. **Demo** lets you try viewer effects locally. For Twitch delivery, link your broadcaster account and start a Hypecade run. The example uses the shared `gamelink-testing` Game ID.
+
+## Add Hypecade to your game
+
+Build this private package from source. To use it from a separate game project, run `npm pack` in this checkout and install the resulting tarball in the game. The existing package name is `muxy-gateway-html5`.
+
+```ts
+import {
+  HypecadeClient, createAuthWidget, createNotificationHistory
+} from "muxy-gateway-html5";
+
+const game = new HypecadeClient({ gameId: "gamelink-testing" });
+const panel = document.getElementById("stream-interactivity")!;
+createAuthWidget(panel, game);
+createNotificationHistory(panel, game);
+
+game.on("authentication", async ({ hasError }) => {
+  if (hasError) return;
+  await game.setGameMetadata({ name: "My game" });
+  await game.setGameTexts([{ label: "Health", value: "50" }]);
+});
+```
+
+Add a `<div id="stream-interactivity"></div>` to the page. For a plain script tag, load `dist/index.global.js` and use `HypecadeHTML5.HypecadeClient`. ESM, CommonJS, and TypeScript declarations are included in `dist/`.
+
+[Read the Hypecade developer guide](docs/hypecade/index.md) for actions and fulfillment, inventory, sessions, polls, and migration from Gateway. Existing `GatewayClient` imports, the `MuxyGatewayHTML5` browser global, and the package entry points still work.
+
+## Development
+
+```sh
+npm run check
+npm test
 npm run build
 ```
 
-The package emits ESM, CommonJS, and browser global bundles in `dist/`.
-
-## Quick Start
-
-```ts
-import {
-  GatewayClient,
-  GameActionCategory,
-  GameActionState,
-  InfiniteCount
-} from "muxy-gateway-html5";
-
-const gateway = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox",
-  autoConnect: true
-});
-
-await gateway.authenticateWithPin("PIN_FROM_EXTENSION");
-
-await gateway.setGameMetadata({
-  name: "My HTML5 Game",
-  theme: "default"
-});
-
-await gateway.setGameTexts([
-  { label: "Current Level", value: "Menu", icon: "fa-solid:dungeon" }
-]);
-
-await gateway.setGameActions([
-  {
-    id: "healthpack",
-    name: "Spawn Healthpack",
-    description: "Spawn a healthpack near the player",
-    icon: "fa-solid:heart",
-    category: GameActionCategory.Help,
-    state: GameActionState.Available,
-    impact: 2,
-    count: InfiniteCount,
-    onGameActionUsed: () => spawnHealthpack()
-  }
-]);
-
-// When the streamer unlinks or the game session ends, clear the persisted
-// Gateway state so the Twitch extension stops showing stale actions/text.
-await gateway.clearGameState();
-await gateway.deauthenticate();
-```
-
-## UI Helpers
-
-```ts
-import {
-  createAuthWidget,
-  createNotificationHistory,
-  createPollingWidget
-} from "muxy-gateway-html5";
-
-const container = document.querySelector("#gateway-ui") as HTMLElement;
-createAuthWidget(container, gateway);
-createNotificationHistory(container, gateway);
-createPollingWidget(container, gateway);
-```
-
-## Endpoint Notes
-
-The Unity package delegates WebSocket URL derivation to the native
-`cgamelink` library. This browser SDK exposes the endpoint as an override:
-
-```ts
-const gateway = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox",
-  endpoint: "wss://your-confirmed-gamelink-endpoint"
-});
-```
-
-Defaults are provided for the documented production and sandbox API hosts, but
-real Gateway deployments should confirm the active GameLink WebSocket endpoint
-for the game ID before going live.
-
-## Examples
-
-- `examples/vanilla`
-- `examples/phaser`
-- `examples/pixi`
-- `examples/side-runner`
-
-Each example shows authentication, one action, one game text update, and a poll.
-The side-runner is the most complete test game: it uses `gamelink-testing`,
-shows link state on the main menu, registers five viewer actions, and includes
-local simulation buttons for testing the in-game visual effects.
-
-## Reference
-
-The upstream Unity package is preserved under `reference/gateway-unity/`.
+The [vanilla](examples/vanilla), [Phaser](examples/phaser), and [PixiJS](examples/pixi) examples show engine integration. The [side-runner](examples/side-runner) includes a playable game and a local simulator.

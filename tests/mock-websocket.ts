@@ -1,3 +1,4 @@
+import type { HypecadeClient } from "../src";
 import type { WebSocketLike } from "../src/types";
 
 export class MockWebSocket implements WebSocketLike {
@@ -48,4 +49,16 @@ export function sentAt(index: number): unknown {
     throw new Error(`No sent message at index ${index}`);
   }
   return JSON.parse(message);
+}
+
+export function replyToSent(index: number, data: unknown = { ok: true }): void {
+  const request = JSON.parse(lastSocket().sent[index]!);
+  lastSocket().receive({ meta: { request_id: request.params.request_id, action: request.action }, data });
+}
+
+export async function signIn(client: HypecadeClient): Promise<void> {
+  const login = client.authenticateWithPin("ABC123");
+  replyToSent(lastSocket().sent.length - 1, { jwt: "test-jwt", refresh: "test-refresh", username: "Streamer" });
+  await login;
+  lastSocket().sent.length = 0;
 }

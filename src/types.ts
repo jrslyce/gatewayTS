@@ -1,10 +1,12 @@
-export type Stage = "production" | "sandbox";
+export type Stage = "production" | "staging" | "sandbox";
 
 export const GATEWAY_EXTENSION_CLIENT_ID = "i575hs2x9lb3u8hqujtezit03w1740";
 export const DEFAULT_PRODUCTION_ENDPOINT =
-  "ws://gamelink.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
+  "wss://gamelink.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
+export const DEFAULT_STAGING_ENDPOINT = DEFAULT_PRODUCTION_ENDPOINT.replace("gamelink.muxy.io", "gamelink.staging.muxy.io");
+/** @deprecated Sandbox is retired. Specify a custom endpoint for legacy fixtures. */
 export const DEFAULT_SANDBOX_ENDPOINT =
-  "ws://gamelink.sandbox.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
+  "wss://gamelink.sandbox.muxy.io/0.2.0/gateway-unity/0.1.0/i575hs2x9lb3u8hqujtezit03w1740";
 
 export interface StorageAdapter {
   getItem(key: string): string | null;
@@ -12,17 +14,23 @@ export interface StorageAdapter {
   removeItem(key: string): void;
 }
 
-export interface GatewayClientOptions {
+export interface HypecadeClientOptions {
   gameId: string;
   stage?: Stage;
   autoConnect?: boolean;
-  endpoint?: string | ((stage: Stage, client: GatewayClientOptions) => string);
+  endpoint?: string | ((stage: Stage, client: HypecadeClientOptions) => string);
   storage?: StorageAdapter;
   storageKey?: string;
+  rememberSession?: boolean;
   websocket?: WebSocketConstructor;
   reconnect?: false | ReconnectOptions;
+  requestTimeoutMs?: number;
+  maxQueuedMessages?: number;
   logger?: Pick<Console, "debug" | "info" | "warn" | "error">;
 }
+
+/** @deprecated Use HypecadeClientOptions. */
+export type GatewayClientOptions = HypecadeClientOptions;
 
 export interface ReconnectOptions {
   initialDelayMs?: number;
@@ -33,6 +41,7 @@ export interface ReconnectOptions {
 
 export interface WebSocketLike {
   readonly readyState: number;
+  readonly bufferedAmount?: number;
   onopen: ((event: Event) => void) | null;
   onclose: ((event: CloseEvent) => void) | null;
   onerror: ((event: Event) => void) | null;

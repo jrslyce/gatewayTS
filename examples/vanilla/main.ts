@@ -1,5 +1,5 @@
 import {
-  GatewayClient,
+  HypecadeClient,
   GameActionCategory,
   GameActionState,
   InfiniteCount,
@@ -9,9 +9,9 @@ import {
   createPollingWidget
 } from "../../src";
 
-const client = new GatewayClient({
-  gameId: "gateway-testing",
-  stage: "sandbox"
+const client = new HypecadeClient({
+  gameId: "gamelink-testing",
+  stage: "production"
 });
 
 const ui = document.querySelector("#gateway-ui") as HTMLElement;
@@ -35,24 +35,28 @@ function draw() {
 
 draw();
 
-await client.setGameMetadata({ name: "Vanilla Gateway Demo", theme: "default" });
-await client.setGameTexts([{ label: "Health", value: String(health), icon: "fa-solid:heart" }]);
-await client.setGameActions([
-  {
-    id: "heal",
-    name: "Heal Player",
-    description: "Restore 10 health",
-    icon: "fa-solid:heart",
-    category: GameActionCategory.Help,
-    state: GameActionState.Available,
-    impact: 1,
-    count: InfiniteCount,
-    onGameActionUsed: async () => {
-      health = Math.min(100, health + 10);
-      await client.setGameTexts([{ label: "Health", value: String(health), icon: "fa-solid:heart" }]);
+client.on("authentication", async ({ hasError }) => {
+  if (hasError) return;
+  await client.setGameMetadata({ name: "Vanilla Hypecade Demo", theme: "default" });
+  await client.setGameTexts([{ label: "Health", value: String(health), icon: "fa-solid:heart" }]);
+  await client.setGameActions([
+    {
+      id: "heal",
+      name: "Heal Player",
+      description: "Restore 10 health",
+      icon: "fa-solid:heart",
+      category: GameActionCategory.Help,
+      state: GameActionState.Available,
+      impact: 1,
+      count: InfiniteCount,
+      onGameActionUsed: async (used) => {
+        health = Math.min(100, health + 10);
+        await client.acceptGameAction(used, "Applied viewer action");
+        await client.setGameTexts([{ label: "Health", value: String(health), icon: "fa-solid:heart" }]);
+      }
     }
-  }
-]);
+  ]);
+});
 
 document.querySelector("#poll")?.addEventListener("click", () => {
   void client.startPoll({

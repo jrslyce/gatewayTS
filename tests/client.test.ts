@@ -8,14 +8,14 @@ import {
   PollMode
 } from "../src";
 import { MemoryStorage } from "../src/storage";
-import { MockWebSocket, lastSocket, sentAt } from "./mock-websocket";
+import { MockWebSocket, lastSocket, sentAt, replyToSent, signIn } from "./mock-websocket";
 
 const websocket = MockWebSocket as unknown as typeof WebSocket;
 
 function makeClient(storage = new MemoryStorage()): GatewayClient {
   return new GatewayClient({
     gameId: "gateway-testing",
-    stage: "sandbox",
+    stage: "production",
     endpoint: "wss://example.test/socket",
     websocket,
     reconnect: false,
@@ -44,7 +44,7 @@ describe("GatewayClient", () => {
     expect(sentAt(0)).toMatchObject({
       action: "authenticate",
       data: {
-        pin: "pZV4Se",
+        pin: "PZV4SE",
         client_id: GATEWAY_EXTENSION_CLIENT_ID,
         game_id: "gateway-testing"
       }
@@ -66,7 +66,7 @@ describe("GatewayClient", () => {
 
   it("resolves authentication failures with Gateway error details", async () => {
     const client = makeClient();
-    const auth = client.authenticateWithPin("EXPIRED");
+    const auth = client.authenticateWithPin("EXP123");
 
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
     lastSocket().receive({
@@ -84,6 +84,7 @@ describe("GatewayClient", () => {
 
   it("publishes Unity-compatible actions to gatewayActions", async () => {
     const client = makeClient();
+    await signIn(client);
     const setActions = client.setGameActions([
       {
         id: "healthpack",
@@ -103,7 +104,7 @@ describe("GatewayClient", () => {
       params: { target: "twitchPurchaseBits" },
       data: { sku: "*" }
     });
-    lastSocket().receive({ meta: { request_id: 1, action: "subscribe" }, data: { ok: true } });
+    replyToSent(0);
 
     expect(sentAt(1)).toMatchObject({
       action: "set",
@@ -120,12 +121,13 @@ describe("GatewayClient", () => {
       }
     });
 
-    lastSocket().receive({ meta: { request_id: 2, action: "set" }, data: { ok: true } });
+    replyToSent(1);
     await expect(setActions).resolves.toMatchObject({ data: { ok: true } });
   });
 
   it("routes transaction updates to bits and action callbacks", async () => {
     const client = makeClient();
+    await signIn(client);
     const actionSpy = vi.fn();
     const bitsSpy = vi.fn();
     client.onBitsUsed(bitsSpy);
@@ -142,8 +144,8 @@ describe("GatewayClient", () => {
     ]);
 
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
-    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
-    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
+    replyToSent(0);
+    replyToSent(1);
     await setActions;
 
     lastSocket().receive({
@@ -166,8 +168,25 @@ describe("GatewayClient", () => {
     );
   });
 
+  it("subscribes to transactions only once across repeated action updates", async () => {
+    const client = makeClient();
+    await signIn(client);
+    const first = client.setGameActions([{ id: "one", name: "One", description: "", impact: 1 }]);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
+    replyToSent(0);
+    replyToSent(1);
+    await first;
+
+    const second = client.setGameActions([{ id: "two", name: "Two", description: "", impact: 1 }]);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
+    expect(sentAt(2)).toMatchObject({ action: "set", params: { target: "gatewayActions" } });
+    replyToSent(2);
+    await second;
+  });
+
   it("publishes metadata and game text in Unity-compatible targets", async () => {
     const client = makeClient();
+    await signIn(client);
 
     const metadata = client.setGameMetadata({ name: "Professor Toast", logo: "", theme: "neon-toast" });
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
@@ -176,15 +195,15 @@ describe("GatewayClient", () => {
       params: { target: "gameMetadata" },
       data: { name: "Professor Toast", logo: "", theme: "neon-toast" }
     });
-    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
+    replyToSent(0);
     await metadata;
 
     const texts = client.setGameTexts([
       { label: "Distance", value: "12m", icon: "" },
       { label: "Toast Heat", value: "4", icon: "" }
     ]);
-    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
-    expect(sentAt(2)).toMatchObject({
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
+    expect(sentAt(1)).toMatchObject({
       action: "patch",
       params: { target: "state" },
       data: {
@@ -201,13 +220,13 @@ describe("GatewayClient", () => {
         ]
       }
     });
-    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
-    lastSocket().receive({ meta: { request_id: 3 }, data: { ok: true } });
+    replyToSent(1);
     await texts;
   });
 
   it("clears published Gateway state before a game disconnects", async () => {
     const client = makeClient();
+    await signIn(client);
 
     const cleared = client.clearGameState();
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
@@ -231,9 +250,9 @@ describe("GatewayClient", () => {
       }
     });
 
-    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
-    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
-    lastSocket().receive({ meta: { request_id: 3 }, data: { ok: true } });
+    replyToSent(0);
+    replyToSent(1);
+    replyToSent(2);
     await expect(cleared).resolves.toMatchObject({ data: { ok: true } });
   });
 
@@ -253,6 +272,7 @@ describe("GatewayClient", () => {
 
   it("creates polls and translates poll updates", async () => {
     const client = makeClient();
+    await signIn(client);
     const pollSpy = vi.fn();
     client.onPollUpdate(pollSpy);
 
@@ -275,9 +295,9 @@ describe("GatewayClient", () => {
       }
     });
 
-    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
+    replyToSent(0);
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
-    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
+    replyToSent(1);
     await started;
 
     lastSocket().receive({
@@ -295,5 +315,52 @@ describe("GatewayClient", () => {
         isFinal: false
       })
     );
+  });
+
+  it("uses the latest vote counts in the final poll update", async () => {
+    const client = makeClient();
+    await signIn(client);
+    const updates: Array<{ results: number[]; isFinal: boolean }> = [];
+    client.onPollUpdate((update) => updates.push(update));
+    const started = client.startPoll({ id: "final-vote", prompt: "Pick", options: ["A", "B"] });
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
+    replyToSent(0);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
+    replyToSent(1);
+    await started;
+
+    lastSocket().receive({
+      action: "update",
+      params: { request_id: 0xffff, target: "poll" },
+      data: { topic_id: "final-vote", results: [3, 8] }
+    });
+    const stopped = client.stopPoll(true);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
+    expect(updates.at(-1)).toMatchObject({ results: [3, 8], count: 11, isFinal: true });
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(3));
+    replyToSent(2);
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(4));
+    replyToSent(3);
+    await stopped;
+  });
+
+  it("rejects pending requests when the connection closes", async () => {
+    const client = makeClient();
+    await signIn(client);
+    const request = client.setGameMetadata({ name: "Waiting" });
+    await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
+    client.disconnect();
+    await expect(request).rejects.toThrow("Gateway connection closed");
+  });
+
+  it("times out requests that receive no response", async () => {
+    const client = new GatewayClient({
+      gameId: "gateway-testing",
+      endpoint: "wss://example.test/socket",
+      websocket,
+      reconnect: false,
+      requestTimeoutMs: 10
+    });
+    await expect(client.setGameMetadata({ name: "Waiting" })).rejects.toThrow("timed out");
   });
 });

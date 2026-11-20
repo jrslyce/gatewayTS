@@ -1,7 +1,7 @@
 {
   "name": "muxy-gateway-html5",
   "version": "0.1.0",
-  "description": "TypeScript-first HTML5 SDK for integrating Muxy Gateway-style Twitch interactivity into browser games.",
+  "description": "Hypecade HTML5 SDK for adding Muxy Gateway Twitch viewer actions and polls to browser games.",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -19,12 +19,13 @@
   "files": [
     "dist",
     "examples",
+    "docs",
     "README.md",
     "LICENSE",
     "NOTICE.md"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs,iife --global-name MuxyGatewayHTML5 --dts --sourcemap --clean",
+    "build": "tsup",
     "check": "tsc --noEmit",
     "dev:side-runner": "vite --config examples/side-runner/vite.config.ts",
     "test": "vitest run",
@@ -34,6 +35,7 @@
   "keywords": [
     "muxy",
     "gateway",
+    "hypecade",
     "twitch",
     "html5-games",
     "phaser",

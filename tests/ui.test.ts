@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { GatewayClient, createAuthWidget, createNotificationHistory, createPollingWidget } from "../src";
 import { MemoryStorage } from "../src/storage";
-import { MockWebSocket, lastSocket } from "./mock-websocket";
+import { MockWebSocket, lastSocket, replyToSent, signIn } from "./mock-websocket";
 
 const websocket = MockWebSocket as unknown as typeof WebSocket;
 
@@ -29,18 +29,20 @@ describe("UI helpers", () => {
 
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(1));
     expect(lastSocket().sent[0]).toContain("ABC123");
+    replyToSent(0, { jwt: "jwt" });
   });
 
   it("renders notification history entries", async () => {
     MockWebSocket.reset();
     const target = document.createElement("div");
     const gateway = client();
+    await signIn(gateway);
     createNotificationHistory(target, gateway, { clearTimeMs: 5000 });
 
     const setActions = gateway.setGameActions([{ id: "heal", name: "Heal", description: "Heal", impact: 1 }]);
     await vi.waitFor(() => expect(lastSocket().sent).toHaveLength(2));
-    lastSocket().receive({ meta: { request_id: 1 }, data: { ok: true } });
-    lastSocket().receive({ meta: { request_id: 2 }, data: { ok: true } });
+    replyToSent(0);
+    replyToSent(1);
     await setActions;
 
     lastSocket().receive({
@@ -52,9 +54,10 @@ describe("UI helpers", () => {
     expect(target.textContent).toContain("viewer just bought heal");
   });
 
-  it("renders poll updates", () => {
+  it("renders poll updates", async () => {
     const target = document.createElement("div");
     const gateway = client();
+    await signIn(gateway);
     createPollingWidget(target, gateway);
 
     gateway.sendRaw({

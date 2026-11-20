@@ -9,15 +9,10 @@ export default defineConfig({
     host: "127.0.0.1",
     proxy: {
       "/muxy-gateway": {
-        target: "ws://gamelink.muxy.io",
+        target: "wss://gamelink.muxy.io",
         ws: true,
         changeOrigin: true,
-        rewrite: () => gatewayPath,
-        configure(proxy) {
-          proxy.on("proxyReqWs", (proxyReq) => {
-            proxyReq.removeHeader("origin");
-          });
-        }
+        rewrite: () => gatewayPath
       }
     }
   }
